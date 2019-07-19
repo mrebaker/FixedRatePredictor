@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 import pandas as pd
 from pandas.tseries.offsets import BDay
 from retry import retry
+import slack
 import tweepy
 import urllib3
 import yaml
@@ -47,8 +48,8 @@ class OutdatedFileError(Exception):
 
 
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
-def getfile():
-    writelog('Downloading file')
+def get_file():
+    write_log('Downloading file')
     projdir = os.path.dirname(os.path.realpath(__file__))
     http = urllib3.PoolManager(
         cert_reqs='CERT_REQUIRED',
@@ -70,11 +71,11 @@ def getfile():
     check_date = config['check_date']
 
     if check_date and filedate != prevday.date():
-        writelog('Date not OK, retrying...')
+        write_log('Date not OK, retrying...')
         raise OutdatedFileError
 
 
-def extractdata(wbpath):
+def extract_data(wbpath):
     projdir = os.path.dirname(os.path.realpath(__file__))
     ws = load_workbook(os.path.join(projdir, wbpath))[sheetname]
     ws['A4'].value = "Dates"
@@ -112,8 +113,8 @@ def extractdata(wbpath):
     return df
 
 
-def makechart(dfs):
-    writelog('Making chart')
+def make_chart(dfs):
+    write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
     
     for i in range(len(terms)-len(plotcolour)):
@@ -209,8 +210,29 @@ def makechart(dfs):
     plt.savefig(os.path.join(projdir, chartsave), facecolor=bgcolour, edgecolor='none')
 
 
-def tweetplot(imgpath):
-    writelog('Tweeting plot')
+def send_to_slack(imgpath):
+    write_log('Sending plot to Slack')
+    proj_dir = os.path.dirname(os.path.realpath(__file__))
+    file_path = os.path.join(proj_dir, imgpath)
+
+    config = yaml.safe_load(open("config.yml"))
+    slack_token = config['slack_login']['bot_token']
+    client = slack.WebClient(token=slack_token)
+
+    # response = client.chat_postMessage(
+    #     channel='CLN9YJ6H4',
+    #     text="Hello world!")
+    # assert response["ok"]
+    # assert response["message"]["text"] == "Hello world!"
+
+    response = client.files_upload(
+        channels='CLN9YJ6H4',
+        file=file_path)
+    assert response["ok"]
+
+
+def send_to_twitter(imgpath):
+    write_log('Tweeting plot')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
     config = yaml.safe_load(open("config.yml"))
@@ -222,7 +244,7 @@ def tweetplot(imgpath):
     api.update_with_media(os.path.join(projdir, imgpath))
 
 
-def writelog(logtext):
+def write_log(logtext):
     projdir = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(projdir, logpath), 'a') as f:
         f.write('{} {}{}'.format(strftime('%Y-%m-%d %H:%M:%S', localtime()),
@@ -231,19 +253,21 @@ def writelog(logtext):
 
 
 if __name__ == '__main__':
-    writelog('Starting up')
+    write_log('Starting up')
 
     config = yaml.safe_load(open("config.yml", "r"))
 
     if config['download_file']:
-        getfile()
+        get_file()
 
-    bankdata = extractdata(bankpath)
-    govdata = extractdata(govpath)
-    chartdata = [('Bank', bankdata), ('Sovereign', govdata)]
-    makechart(chartdata)
+    bank_data = extract_data(bankpath)
+    gov_data = extract_data(govpath)
+    chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
+    make_chart(chart_data)
 
-    if config['download_file']:
-        tweetplot(chartsave)
+    if config['send_tweet']:
+        send_to_twitter(chartsave)
+    if config['send_slack']:
+        send_to_slack(chartsave)
 
-    writelog('Done\n----------------')
+    write_log('Done\n----------------')
