@@ -12,16 +12,17 @@ from math import ceil, floor
 import os
 from time import localtime, strftime
 import zipfile
-import certifi
 
+import certifi
+import urllib3
+import yaml
 import pandas as pd
+
 from pandas.tseries.offsets import BDay
 from retry import retry
 import slack
 import tweepy
-import urllib3
 from openpyxl import load_workbook
-import yaml
 
 
 # have to import matplotlib separately first
@@ -123,6 +124,12 @@ def extract_data(wbpath):
 
 
 def make_chart(dfs):
+    '''
+    Creates a chart from two input dataframes, and saves it to a PNG file.
+    TODO: return filename
+    :param dfs:
+    :return: none
+    '''
     write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
@@ -151,17 +158,13 @@ def make_chart(dfs):
         axs[-1].grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
         dmin = df.index.values[0]
-        # drpt = df.index.values[-1]
-        today = date.today()
-        dmax = monthrange(today.year, today.month)[1]
-
+        dmax = monthrange(date.today().year, date.today().month)[1]
         axs[-1].set_xlim(1, dmax)
         axs[-1].plot(df)
 
         for j, col in enumerate(df):
             axs[-1].plot((dmin, dmax), (df[col][dmin], df[col][dmin]),
-                         linestyle=":",
-                         linewidth=1)
+                         linestyle=":", linewidth=1)
 
         # format axis labels
         plt.title(dfname, **CHART_FONT)
@@ -171,7 +174,6 @@ def make_chart(dfs):
                                 **CHART_FONT)
         axs[-1].set_xticklabels(('{:1.0f}'.format(x) for x in axs[-1].get_xticks()),
                                 **CHART_FONT)
-
         axs[-1].set_xlabel("Day", **CHART_FONT)
 
     ymin, ymax = axs[-1].get_ylim()
@@ -213,6 +215,7 @@ def make_chart(dfs):
                         color=PLOT_COLOUR[j],
                         fontsize=10,
                         **CHART_FONT)
+
     plt.tight_layout(rect=[-0.010, 0, 0.85 + 0.05 * len(dfs), 0.94])
     plt.subplots_adjust(wspace=0.20)
     plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
@@ -227,12 +230,6 @@ def send_to_slack(imgpath):
     config = yaml.safe_load(open("config.yml"))
     slack_token = config['slack_login']['bot_token']
     client = slack.WebClient(token=slack_token)
-
-    # response = client.chat_postMessage(
-    #     channel='CLN9YJ6H4',
-    #     text="Hello world!")
-    # assert response["ok"]
-    # assert response["message"]["text"] == "Hello world!"
 
     response = client.files_upload(
         channels='CLN9YJ6H4',
@@ -262,6 +259,8 @@ def write_log(logtext):
 
 
 if __name__ == '__main__':
+    # todo: predictions
+    # todo: fix first day of the month issue
     write_log('Starting up')
 
     config = yaml.safe_load(open("config.yml", "r"))
