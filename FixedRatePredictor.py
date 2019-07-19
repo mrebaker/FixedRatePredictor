@@ -1,19 +1,28 @@
+"""
+FixedRatePredictor
+
+Gets files from the Bank of England website and charts the recent history of swap rates
+Should predict movements in fixed rates but doesn't do that yet.
+"""
+
+
 from calendar import monthrange
 from datetime import date
 from math import ceil, floor
 import os
 from time import localtime, strftime
-
+import zipfile
 import certifi
-from openpyxl import load_workbook
+
 import pandas as pd
 from pandas.tseries.offsets import BDay
 from retry import retry
 import slack
 import tweepy
 import urllib3
+from openpyxl import load_workbook
 import yaml
-import zipfile
+
 
 # have to import matplotlib separately first
 # then change away from x-using backend
@@ -24,22 +33,22 @@ import matplotlib.pyplot as plt
 
 
 # set the swap rate tenors we are interested in
-terms = [2, 3, 4, 5, 10, 1]
+TERMS = [2, 3, 4, 5, 10, 1]
 
-bankpath = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
-govpath = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
-chartsave = 'chart.png'
-dbpath = 'db.csv'
-fileurl = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
-logpath = 'log.txt'
-sheetname = '2. fwd curve'
-zippath = os.path.join('temp', 'yield.zip')
+BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
+GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
+CHART_SAVE = 'chart.png'
+DB_PATH = 'db.csv'
+FILE_URL = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
+LOG_PATH = 'log.txt'
+SHEET_NAME = '2. fwd curve'
+ZIP_PATH = os.path.join('temp', 'yield.zip')
 
 # chart appearance
-plotcolour = ['#00E87E', '#0C87F2', '#5000DB', '#F20F7B', '#E85200']
-bgcolour = '#FAFAFD'
-fgcolour = '#EEEEEE'
-chartfont = {'fontname': 'Cabin'}
+PLOT_COLOUR = ['#00E87E', '#0C87F2', '#5000DB', '#F20F7B', '#E85200']
+BG_COLOUR = '#FAFAFD'
+FG_COLOUR = '#EEEEEE'
+CHART_FONT = {'fontname': 'Cabin'}
 
 
 # custom error in case BoE website not updated
@@ -54,17 +63,17 @@ def get_file():
     http = urllib3.PoolManager(
         cert_reqs='CERT_REQUIRED',
         ca_certs=certifi.where())
-    r = http.request('GET', fileurl)
-    f = open(os.path.join(projdir, zippath), 'w+b')
+    r = http.request('GET', FILE_URL)
+    f = open(os.path.join(projdir, ZIP_PATH), 'w+b')
     f.write(r.data)
-    zip_ref = zipfile.ZipFile(os.path.join(projdir, zippath), 'r')
+    zip_ref = zipfile.ZipFile(os.path.join(projdir, ZIP_PATH), 'r')
     zip_ref.extractall(os.path.join(projdir, 'temp', 'yields'))
     zip_ref.close()
     f.close()
-    wb = load_workbook(filename=os.path.join(projdir, bankpath))
-    ws = wb[sheetname]
-    lastrow = str(wb[sheetname].max_row)
-    filedate = ws['A'+lastrow].value.date()
+    workbook = load_workbook(filename=os.path.join(projdir, BANK_PATH))
+    worksheet = workbook[SHEET_NAME]
+    lastrow = str(workbook[SHEET_NAME].max_row)
+    filedate = worksheet['A'+lastrow].value.date()
     prevday = date.today() - BDay(1)
 
     config = yaml.safe_load(open("config.yml"))
@@ -77,37 +86,37 @@ def get_file():
 
 def extract_data(wbpath):
     projdir = os.path.dirname(os.path.realpath(__file__))
-    ws = load_workbook(os.path.join(projdir, wbpath))[sheetname]
-    ws['A4'].value = "Dates"
+    worksheet = load_workbook(os.path.join(projdir, wbpath))[SHEET_NAME]
+    worksheet['A4'].value = "Dates"
 
     # openpyxl max_row is unreliable with blank rows
     # so work out the max row manually
-    lastrow = ws.max_row
+    lastrow = worksheet.max_row
     for r in range(lastrow, 1, -1):
-        if ws.cell(row=r, column=1).value is not None:
+        if worksheet.cell(row=r, column=1).value is not None:
             lastrow = r
             break
 
     # same for columns
-    lastcol = ws.max_column
+    lastcol = worksheet.max_column
     for c in range(lastcol, 1, -1):
-        if ws.cell(row=4, column=c).value is not None:
+        if worksheet.cell(row=4, column=c).value is not None:
             lastcol = c
             break
 
-    cols = [c.value for c in ws[4] if c.value is not None]
+    cols = [c.value for c in worksheet[4] if c.value is not None]
     data = list()
     for r in range(6, lastrow):
         rowdata = list()
         for c in range(1, lastcol+1):
-            rowdata.append(ws.cell(row=r, column=c).value)
+            rowdata.append(worksheet.cell(row=r, column=c).value)
         data.append(rowdata)
 
     df = pd.DataFrame(data, columns=cols)
     df['Dates'] = df['Dates'].dt.day
     df.set_index('Dates', inplace=True)
-    terms.sort()
-    df = df[terms].dropna()
+    TERMS.sort()
+    df = df[TERMS].dropna()
     df /= 100
 
     return df
@@ -116,9 +125,9 @@ def extract_data(wbpath):
 def make_chart(dfs):
     write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
-    
-    for i in range(len(terms)-len(plotcolour)):
-        plotcolour.append(plotcolour[i])
+
+    for i in range(len(TERMS) - len(PLOT_COLOUR)):
+        PLOT_COLOUR.append(PLOT_COLOUR[i])
 
     fig = plt.figure(figsize=(4 * len(dfs), 4))
     layouts = {1: (1, 1),
@@ -137,9 +146,9 @@ def make_chart(dfs):
         else:
             axs.append(fig.add_subplot(x, y, i))
 
-        axs[-1].set_facecolor(bgcolour)
-        axs[-1].set_prop_cycle('color', plotcolour)
-        axs[-1].grid(color=fgcolour, linestyle='-', linewidth=0.5)
+        axs[-1].set_facecolor(BG_COLOUR)
+        axs[-1].set_prop_cycle('color', PLOT_COLOUR)
+        axs[-1].grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
         dmin = df.index.values[0]
         # drpt = df.index.values[-1]
@@ -155,15 +164,15 @@ def make_chart(dfs):
                          linewidth=1)
 
         # format axis labels
-        plt.title(dfname, **chartfont)
+        plt.title(dfname, **CHART_FONT)
         axs[-1].set_ybound(floor(axs[-1].get_ybound()[0] * 1000) / 1000,
                            ceil(axs[-1].get_ybound()[1] * 1000) / 1000)
         axs[-1].set_yticklabels(('{:1.2f}%'.format(x * 100) for x in axs[-1].get_yticks()),
-                                **chartfont)
+                                **CHART_FONT)
         axs[-1].set_xticklabels(('{:1.0f}'.format(x) for x in axs[-1].get_xticks()),
-                                **chartfont)
+                                **CHART_FONT)
 
-        axs[-1].set_xlabel("Day", **chartfont)
+        axs[-1].set_xlabel("Day", **CHART_FONT)
 
     ymin, ymax = axs[-1].get_ylim()
     yrange = ymax - ymin
@@ -181,16 +190,16 @@ def make_chart(dfs):
                         xy=(dmax - 0.5, df[col][dmin] + 0.0150 * yrange),
                         xycoords='data',
                         ha='right',
-                        color=plotcolour[j],
+                        color=PLOT_COLOUR[j],
                         fontsize=12,
-                        **chartfont)
+                        **CHART_FONT)
             # label end of dashed line with rate from day one
             ax.annotate('  {:1.2f}%'.format(100 * df[col][dmin]),
                         xy=(dmax, df[col][dmin] - 0.015 * yrange),
                         xycoords='data',
-                        color=plotcolour[j],
+                        color=PLOT_COLOUR[j],
                         fontsize=10,
-                        **chartfont)
+                        **CHART_FONT)
             # label end of plotted line with current rate
             # first, work out if displacement needed to avoid clash
             labeloffset = 0
@@ -201,13 +210,13 @@ def make_chart(dfs):
             ax.annotate('  {:1.2f}%'.format(100 * df[col][drpt]),
                         xy=(drpt, df[col][drpt] + labeloffset),
                         xycoords='data',
-                        color=plotcolour[j],
+                        color=PLOT_COLOUR[j],
                         fontsize=10,
-                        **chartfont)
+                        **CHART_FONT)
     plt.tight_layout(rect=[-0.010, 0, 0.85 + 0.05 * len(dfs), 0.94])
     plt.subplots_adjust(wspace=0.20)
-    plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **chartfont)
-    plt.savefig(os.path.join(projdir, chartsave), facecolor=bgcolour, edgecolor='none')
+    plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
+    plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
 
 
 def send_to_slack(imgpath):
@@ -246,7 +255,7 @@ def send_to_twitter(imgpath):
 
 def write_log(logtext):
     projdir = os.path.dirname(os.path.realpath(__file__))
-    with open(os.path.join(projdir, logpath), 'a') as f:
+    with open(os.path.join(projdir, LOG_PATH), 'a') as f:
         f.write('{} {}{}'.format(strftime('%Y-%m-%d %H:%M:%S', localtime()),
                                  logtext,
                                  '\n'))
@@ -260,14 +269,14 @@ if __name__ == '__main__':
     if config['download_file']:
         get_file()
 
-    bank_data = extract_data(bankpath)
-    gov_data = extract_data(govpath)
+    bank_data = extract_data(BANK_PATH)
+    gov_data = extract_data(GOV_PATH)
     chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
     make_chart(chart_data)
 
     if config['send_tweet']:
-        send_to_twitter(chartsave)
+        send_to_twitter(CHART_SAVE)
     if config['send_slack']:
-        send_to_slack(chartsave)
+        send_to_slack(CHART_SAVE)
 
     write_log('Done\n----------------')
