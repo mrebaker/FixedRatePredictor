@@ -107,7 +107,7 @@ def extract_data(wbpath):
 
     cols = [c.value for c in worksheet[4] if c.value is not None]
     data = list()
-    for r in range(6, lastrow):
+    for r in range(6, lastrow+1):
         rowdata = list()
         for c in range(1, lastcol+1):
             rowdata.append(worksheet.cell(row=r, column=c).value)
@@ -115,6 +115,7 @@ def extract_data(wbpath):
 
     df = pd.DataFrame(data, columns=cols)
     df['Dates'] = df['Dates'].dt.day
+
     df.set_index('Dates', inplace=True)
     TERMS.sort()
     df = df[TERMS].dropna()
@@ -124,12 +125,13 @@ def extract_data(wbpath):
 
 
 def make_chart(dfs):
-    '''
+    """
     Creates a chart from two input dataframes, and saves it to a PNG file.
     TODO: return filename
     :param dfs:
     :return: none
     '''
+    """
     write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
@@ -170,9 +172,9 @@ def make_chart(dfs):
         plt.title(dfname, **CHART_FONT)
         axs[-1].set_ybound(floor(axs[-1].get_ybound()[0] * 1000) / 1000,
                            ceil(axs[-1].get_ybound()[1] * 1000) / 1000)
-        axs[-1].set_yticklabels(('{:1.2f}%'.format(x * 100) for x in axs[-1].get_yticks()),
+        axs[-1].set_yticklabels((f'{x*100 : 1.2f}%' for x in axs[-1].get_yticks()),
                                 **CHART_FONT)
-        axs[-1].set_xticklabels(('{:1.0f}'.format(x) for x in axs[-1].get_xticks()),
+        axs[-1].set_xticklabels((f'{x : 1.0f}' for x in axs[-1].get_xticks()),
                                 **CHART_FONT)
         axs[-1].set_xlabel("Day", **CHART_FONT)
 
@@ -250,12 +252,11 @@ def send_to_twitter(imgpath):
     api.update_with_media(os.path.join(projdir, imgpath))
 
 
-def write_log(logtext):
+def write_log(log_text):
     projdir = os.path.dirname(os.path.realpath(__file__))
     with open(os.path.join(projdir, LOG_PATH), 'a') as f:
-        f.write('{} {}{}'.format(strftime('%Y-%m-%d %H:%M:%S', localtime()),
-                                 logtext,
-                                 '\n'))
+        log_time = strftime('%Y-%m-%d %H:%M:%S', localtime())
+        f.write(f'{log_time} {log_text}\n')
 
 
 if __name__ == '__main__':
