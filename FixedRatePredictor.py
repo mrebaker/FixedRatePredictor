@@ -14,6 +14,7 @@ from time import localtime, strftime
 import zipfile
 
 import certifi
+import numpy as np
 import urllib3
 import yaml
 import pandas as pd
@@ -40,13 +41,13 @@ BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month
 GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
 CHART_SAVE = 'chart.png'
 DB_PATH = 'db.csv'
-FILE_URL = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
+# FILE_URL = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
 LOG_PATH = 'log.txt'
 SHEET_NAME = '2. fwd curve'
-ZIP_PATH = os.path.join('temp', 'yield.zip')
+# ZIP_PATH = os.path.join('temp', 'yield.zip')
 
 # chart appearance
-PLOT_COLOUR = ['#00E87E', '#0C87F2', '#5000DB', '#F20F7B', '#E85200']
+# PLOT_CMAP = 'Set2'
 BG_COLOUR = '#FAFAFD'
 FG_COLOUR = '#EEEEEE'
 CHART_FONT = {'fontname': 'Cabin'}
@@ -57,24 +58,32 @@ class OutdatedFileError(Exception):
     pass
 
 
+def build_prediction_model():
+    file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/blcnomddata.zip')
+    print(file_name)
+
+
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
-def get_file():
-    write_log('Downloading file')
-    projdir = os.path.dirname(os.path.realpath(__file__))
-    http = urllib3.PoolManager(
-        cert_reqs='CERT_REQUIRED',
-        ca_certs=certifi.where())
-    r = http.request('GET', FILE_URL)
-    f = open(os.path.join(projdir, ZIP_PATH), 'w+b')
-    f.write(r.data)
-    zip_ref = zipfile.ZipFile(os.path.join(projdir, ZIP_PATH), 'r')
-    zip_ref.extractall(os.path.join(projdir, 'temp', 'yields'))
+def daily_chart():
+    write_log('Starting up')
+
+    config = yaml.safe_load(open("config.yml", "r"))
+
+    if config['download_file']:
+        file_url = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
+        file_name = get_file(file_url)
+    else:
+        file_name = os.path.join('temp', 'yield.zip')
+
+    proj_dir = os.path.dirname(os.path.realpath(__file__))
+    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
+    zip_ref.extractall(os.path.join(proj_dir, 'temp', 'yields'))
     zip_ref.close()
-    f.close()
-    workbook = load_workbook(filename=os.path.join(projdir, BANK_PATH))
+
+    workbook = load_workbook(filename=os.path.join(proj_dir, BANK_PATH))
     worksheet = workbook[SHEET_NAME]
     lastrow = str(workbook[SHEET_NAME].max_row)
-    filedate = worksheet['A'+lastrow].value.date()
+    filedate = worksheet['A' + lastrow].value.date()
     prevday = date.today() - BDay(1)
 
     config = yaml.safe_load(open("config.yml"))
@@ -83,6 +92,36 @@ def get_file():
     if check_date and filedate != prevday.date():
         write_log('Date not OK, retrying...')
         raise OutdatedFileError
+
+    bank_data = extract_data(BANK_PATH)
+    gov_data = extract_data(GOV_PATH)
+    chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
+    make_chart(chart_data)
+
+    if config['send_tweet']:
+        send_to_twitter(CHART_SAVE)
+    if config['send_slack']:
+        send_to_slack(CHART_SAVE)
+
+    write_log('Done\n----------------')
+
+
+def get_file(file_url):
+    write_log('Downloading file')
+    projdir = os.path.dirname(os.path.realpath(__file__))
+    http = urllib3.PoolManager(
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where())
+    r = http.request('GET', file_url)
+
+    file_name = file_url.rsplit('/', 1)[-1]
+
+    write_path = os.path.join('temp', f'{date.today().strftime("%Y%m%d")} {file_name}')
+
+    with open(os.path.join(projdir, write_path), 'w+b') as f:
+        f.write(r.data)
+
+    return write_path
 
 
 def extract_data(wbpath):
@@ -135,8 +174,7 @@ def make_chart(dfs):
     write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
-    for i in range(len(TERMS) - len(PLOT_COLOUR)):
-        PLOT_COLOUR.append(PLOT_COLOUR[i])
+    colours = plt.cm.Set2(np.linspace(0, 1, len(TERMS)+1))
 
     fig = plt.figure(figsize=(4 * len(dfs), 4))
     layouts = {1: (1, 1),
@@ -156,7 +194,7 @@ def make_chart(dfs):
             axs.append(fig.add_subplot(x, y, i))
 
         axs[-1].set_facecolor(BG_COLOUR)
-        axs[-1].set_prop_cycle('color', PLOT_COLOUR)
+        axs[-1].set_prop_cycle('color', colours)
         axs[-1].grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
         dmin = df.index.values[0]
@@ -194,14 +232,14 @@ def make_chart(dfs):
                         xy=(dmax - 0.5, df[col][dmin] + 0.0150 * yrange),
                         xycoords='data',
                         ha='right',
-                        color=PLOT_COLOUR[j],
+                        color=colours[j],
                         fontsize=12,
                         **CHART_FONT)
             # label end of dashed line with rate from day one
             ax.annotate('  {:1.2f}%'.format(100 * df[col][dmin]),
                         xy=(dmax, df[col][dmin] - 0.015 * yrange),
                         xycoords='data',
-                        color=PLOT_COLOUR[j],
+                        color=colours[j],
                         fontsize=10,
                         **CHART_FONT)
             # label end of plotted line with current rate
@@ -214,7 +252,7 @@ def make_chart(dfs):
             ax.annotate('  {:1.2f}%'.format(100 * df[col][drpt]),
                         xy=(drpt, df[col][drpt] + labeloffset),
                         xycoords='data',
-                        color=PLOT_COLOUR[j],
+                        color=colours[j],
                         fontsize=10,
                         **CHART_FONT)
 
@@ -261,22 +299,5 @@ def write_log(log_text):
 
 if __name__ == '__main__':
     # todo: predictions
-    # todo: fix first day of the month issue
-    write_log('Starting up')
-
-    config = yaml.safe_load(open("config.yml", "r"))
-
-    if config['download_file']:
-        get_file()
-
-    bank_data = extract_data(BANK_PATH)
-    gov_data = extract_data(GOV_PATH)
-    chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
-    make_chart(chart_data)
-
-    if config['send_tweet']:
-        send_to_twitter(CHART_SAVE)
-    if config['send_slack']:
-        send_to_slack(CHART_SAVE)
-
-    write_log('Done\n----------------')
+    daily_chart()
+    build_prediction_model()
