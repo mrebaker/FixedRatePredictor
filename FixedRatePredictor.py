@@ -67,7 +67,7 @@ def build_prediction_model():
 def daily_chart():
     write_log('Starting up')
 
-    config = yaml.safe_load(open("config.yml", "r"))
+    config = load_config()
 
     if config['download_file']:
         file_url = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
@@ -86,7 +86,6 @@ def daily_chart():
     filedate = worksheet['A' + lastrow].value.date()
     prevday = date.today() - BDay(1)
 
-    config = yaml.safe_load(open("config.yml"))
     check_date = config['check_date']
 
     if check_date and filedate != prevday.date():
@@ -161,6 +160,13 @@ def extract_data(wbpath):
     df /= 100
 
     return df
+
+
+def load_config():
+    proj_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(proj_dir, "config.yml")
+    config = yaml.safe_load(open(config_path))
+    return config
 
 
 def make_chart(dfs):
@@ -267,7 +273,7 @@ def send_to_slack(imgpath):
     proj_dir = os.path.dirname(os.path.realpath(__file__))
     file_path = os.path.join(proj_dir, imgpath)
 
-    config = yaml.safe_load(open("config.yml"))
+    config = load_config()
     slack_token = config['slack_login']['bot_token']
     client = slack.WebClient(token=slack_token)
 
@@ -281,7 +287,7 @@ def send_to_twitter(imgpath):
     write_log('Tweeting plot')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
-    config = yaml.safe_load(open("config.yml"))
+    config = load_config()
     twit_auth = config['twitter_login']
 
     auth = tweepy.OAuthHandler(twit_auth['consumer_key'], twit_auth['consumer_secret'])
