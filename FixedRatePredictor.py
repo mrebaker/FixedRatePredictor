@@ -20,6 +20,7 @@ import yaml
 import pandas as pd
 
 from pandas.tseries.offsets import BDay
+from pandas.plotting import register_matplotlib_converters
 from retry import retry
 import slack
 import tweepy
@@ -30,12 +31,13 @@ from openpyxl import load_workbook
 # then change away from x-using backend
 # then import pyplot
 import matplotlib
+register_matplotlib_converters()
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
 # set the swap rate tenors we are interested in
-TERMS = [2, 3, 4, 5, 10, 1]
+TERMS = [1, 2, 3, 4, 5, 10]
 
 BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
 GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
@@ -43,7 +45,6 @@ CHART_SAVE = 'chart.png'
 DB_PATH = 'db.csv'
 # FILE_URL = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
 LOG_PATH = 'log.txt'
-SHEET_NAME = '2. fwd curve'
 # ZIP_PATH = os.path.join('temp', 'yield.zip')
 
 # chart appearance
@@ -60,7 +61,20 @@ class OutdatedFileError(Exception):
 
 def build_prediction_model():
     file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/blcnomddata.zip')
-    print(file_name)
+    proj_dir = os.path.dirname(os.path.realpath(__file__))
+    zip_folder = os.path.join(proj_dir, 'temp', 'yield-archive')
+    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
+    zip_ref.extractall(zip_folder)
+    zip_ref.close()
+
+    wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
+    data = extract_data(wb_file, '4. spot curve')
+
+    for tenor in TERMS:
+        plt.plot(data[tenor])
+    plt.savefig('arch-plot', facecolor=BG_COLOUR, edgecolor='none')
+    # todo: calculate range change in month, correlate with actual rate changes
+    # todo: use more than one archive yield file
 
 
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
@@ -81,8 +95,8 @@ def daily_chart():
     zip_ref.close()
 
     workbook = load_workbook(filename=os.path.join(proj_dir, BANK_PATH))
-    worksheet = workbook[SHEET_NAME]
-    lastrow = str(workbook[SHEET_NAME].max_row)
+    worksheet = workbook['4. spot curve']
+    lastrow = str(workbook['4. spot curve'].max_row)
     filedate = worksheet['A' + lastrow].value.date()
     prevday = date.today() - BDay(1)
 
@@ -92,8 +106,11 @@ def daily_chart():
         write_log('Date not OK, retrying...')
         raise OutdatedFileError
 
-    bank_data = extract_data(BANK_PATH)
-    gov_data = extract_data(GOV_PATH)
+    bank_data = extract_data(BANK_PATH, '4. spot curve')
+    gov_data = extract_data(GOV_PATH, '4. spot curve')
+    bank_data['Dates'] = bank_data['Dates'].dt.day
+    gov_data['Dates'] = gov_data['Dates'].dt.day
+
     chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
     make_chart(chart_data)
 
@@ -123,9 +140,14 @@ def get_file(file_url):
     return write_path
 
 
-def extract_data(wbpath):
+def extract_data(wb_path, sheet_name):
+    """
+    Returns a dataframe containing the data from a given path and sheet
+    :param wb_path:
+    :return:
+    """
     projdir = os.path.dirname(os.path.realpath(__file__))
-    worksheet = load_workbook(os.path.join(projdir, wbpath))[SHEET_NAME]
+    worksheet = load_workbook(os.path.join(projdir, wb_path))[sheet_name]
     worksheet['A4'].value = "Dates"
 
     # openpyxl max_row is unreliable with blank rows
@@ -152,8 +174,6 @@ def extract_data(wbpath):
         data.append(rowdata)
 
     df = pd.DataFrame(data, columns=cols)
-    df['Dates'] = df['Dates'].dt.day
-
     df.set_index('Dates', inplace=True)
     TERMS.sort()
     df = df[TERMS].dropna()
@@ -305,5 +325,5 @@ def write_log(log_text):
 
 if __name__ == '__main__':
     # todo: predictions
-    daily_chart()
+    # daily_chart()
     build_prediction_model()
