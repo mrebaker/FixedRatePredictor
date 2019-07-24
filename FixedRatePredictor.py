@@ -107,7 +107,7 @@ def daily_chart():
             raise OutdatedFileError
 
     bank_data = extract_data(BANK_PATH, '4. spot curve')
-    bank_data['Date'] = bank_data['Date'].dt.day
+    bank_data.loc[:, 'Date'] = bank_data.loc[:, 'Date'].dt.day
     
     # gov_data = extract_data(GOV_PATH, '4. spot curve')
     # gov_data['Date'] = gov_data['Date'].dt.day
@@ -183,7 +183,6 @@ def extract_data(wb_path, sheet_name):
     df.columns = [f'{c}y' for c in cols]
     df /= 100
     df.loc[:, 'Date'] = df_raw.loc[:, 'Date']
-    print(df)
     return df
 
 
@@ -226,7 +225,7 @@ def make_chart(df_name, df):
 
     # plot a dashed line showing the start-of-month value for each term
     for j, col in enumerate(df.loc[:, cols]):
-        ax.plot((dmin, dmax), (df.loc[dmin, col], df.loc[dmin, col]),
+        ax.plot((dmin, dmax), (df.iloc[0].loc[col], df.iloc[0].loc[col]),
                 linestyle=":", linewidth=1)
 
     # format axis labels
@@ -242,26 +241,24 @@ def make_chart(df_name, df):
     ymin, ymax = ax.get_ylim()
     yrange = ymax - ymin
 
-    dmin = df.loc[0:, 'Date']
-    drpt = df.loc[:-1, 'Date']
+    dmin = df.iloc[0].loc['Date']
+    drpt = df.iloc[-1].loc['Date']
     today = date.today()
     dmax = monthrange(today.year, today.month)[1]
 
     for j, col in enumerate(df.loc[:, cols]):
-        print(col)
         # label near end of dashed line with relevant term (2yr, 10yr etc)
-        ax.annotate(str(col) + 'yr',
-                    xy=(dmax - 0.5, df[col][dmin] + 0.0150 * yrange),
+        ax.annotate(str(col) + 'r',
+                    xy=(dmax - 0.5, df.iloc[0].loc[col] + 0.0150 * yrange),
                     xycoords='data',
                     ha='right',
                     color=colours[j],
                     fontsize=12,
                     **CHART_FONT)
         # label end of dashed line with rate from day one
-        start_rate = 100 * df.loc[0:, col]
-        print(start_rate)
+        start_rate = 100 * df.loc[0, col]
         ax.annotate('  {:1.2f}%'.format(start_rate),
-                    xy=(dmax, df[col][dmin] - 0.015 * yrange),
+                    xy=(dmax, df.iloc[0].loc[col] - 0.015 * yrange),
                     xycoords='data',
                     color=colours[j],
                     fontsize=10,
@@ -269,15 +266,15 @@ def make_chart(df_name, df):
         # label end of plotted line with current rate
         # first, work out if displacement needed to avoid clash
         labeloffset = 0
-        ratediff = df[col][drpt] - df[col][dmin]
+        rate_diff = df.iloc[-1].loc[col] - df.iloc[0].loc[col]
 
-        if abs(ratediff) < 0.0002:
+        if abs(rate_diff) < 0.0002:
             labeloffset = -0.0002
 
-        latest_rate = 100 * df[col][drpt]
-        # print(latest_rate)
+        latest_rate = 100 * df.iloc[-1].loc[col]
+
         ax.annotate('  {:1.2f}%'.format(latest_rate),
-                    xy=(drpt, df[col][drpt] + labeloffset),
+                    xy=(drpt, df.iloc[-1].loc[col] + labeloffset),
                     xycoords='data',
                     color=colours[j],
                     fontsize=10,
@@ -331,7 +328,7 @@ def make_charts(dfs):
 
         # plot a dashed line showing the start-of-month value for each term
         for j, col in enumerate(df.loc[:, TERMS]):
-            axs[-1].plot((dmin, dmax), (df.loc[dmin, col], df.loc[dmin, col]),
+            axs[-1].plot((dmin, dmax), (df.iloc[0].loc[col], df.iloc[0].loc[col]),
                          linestyle=":", linewidth=1)
 
         # format axis labels
@@ -356,16 +353,16 @@ def make_charts(dfs):
         dmax = monthrange(today.year, today.month)[1]
         for j, col in enumerate(df):
             # label near end of dashed line with relevant term (2yr, 10yr etc)
-            ax.annotate(str(col) + 'yr',
-                        xy=(dmax - 0.5, df[col][dmin] + 0.0150 * yrange),
+            ax.annotate(col + 'r',
+                        xy=(dmax - 0.5, df.iloc[0].loc[col] + 0.0150 * yrange),
                         xycoords='data',
                         ha='right',
                         color=colours[j],
                         fontsize=12,
                         **CHART_FONT)
             # label end of dashed line with rate from day one
-            ax.annotate('  {:1.2f}%'.format(100 * df[col][dmin]),
-                        xy=(dmax, df[col][dmin] - 0.015 * yrange),
+            ax.annotate('  {:1.2f}%'.format(100 * df.loc[dmin, col]),
+                        xy=(dmax, df.iloc[0].loc[col] - 0.015 * yrange),
                         xycoords='data',
                         color=colours[j],
                         fontsize=10,
@@ -373,12 +370,12 @@ def make_charts(dfs):
             # label end of plotted line with current rate
             # first, work out if displacement needed to avoid clash
             labeloffset = 0
-            ratediff = df[col][drpt] - df[col][dmin]
+            ratediff = df.loc[drpt, col] - df.loc[dmin, col]
 
             if abs(ratediff) < 0.0002:
                 labeloffset = -0.0002
-            ax.annotate('  {:1.2f}%'.format(100 * df[col][drpt]),
-                        xy=(drpt, df[col][drpt] + labeloffset),
+            ax.annotate('  {:1.2f}%'.format(100 * df.loc[drpt, col]),
+                        xy=(drpt, df.loc[drpt, col] + labeloffset),
                         xycoords='data',
                         color=colours[j],
                         fontsize=10,
