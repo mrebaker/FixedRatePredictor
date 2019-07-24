@@ -6,26 +6,24 @@ Should predict movements in fixed rates but doesn't do that yet.
 """
 
 
+import os
+import zipfile
 from calendar import monthrange
 from datetime import date
 from math import ceil, floor
-import os
 from time import localtime, strftime
-import zipfile
 
 import certifi
 import numpy as np
-import urllib3
-import yaml
 import pandas as pd
-
-from pandas.tseries.offsets import BDay
-from pandas.plotting import register_matplotlib_converters
-from retry import retry
 import slack
 import tweepy
+import urllib3
+import yaml
 from openpyxl import load_workbook
-
+from pandas.plotting import register_matplotlib_converters
+from pandas.tseries.offsets import BDay
+from retry import retry
 
 # have to import matplotlib separately first
 # then change away from x-using backend
@@ -43,7 +41,6 @@ BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month
 GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
 CHART_SAVE = 'chart.png'
 DB_PATH = 'db.csv'
-# FILE_URL = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
 LOG_PATH = 'log.txt'
 # ZIP_PATH = os.path.join('temp', 'yield.zip')
 
@@ -96,27 +93,29 @@ def daily_chart():
     zip_ref.extractall(os.path.join(proj_dir, 'temp', 'yields'))
     zip_ref.close()
 
-    workbook = load_workbook(filename=os.path.join(proj_dir, BANK_PATH))
-    worksheet = workbook['4. spot curve']
-    lastrow = str(workbook['4. spot curve'].max_row)
-    filedate = worksheet['A' + lastrow].value.date()
-    prevday = date.today() - BDay(1)
-
     check_date = config['check_date']
-
-    if check_date and filedate != prevday.date():
-        write_log('Date not OK, retrying...')
-        raise OutdatedFileError
+    
+    if check_date:
+        workbook = load_workbook(filename=os.path.join(proj_dir, BANK_PATH))
+        worksheet = workbook['4. spot curve']
+        lastrow = str(workbook['4. spot curve'].max_row)
+        filedate = worksheet['A' + lastrow].value.date()
+        prevday = date.today() - BDay(1)
+    
+        if filedate != prevday.date():
+            write_log('Date not OK, retrying...')
+            raise OutdatedFileError
 
     bank_data = extract_data(BANK_PATH, '4. spot curve')
-    gov_data = extract_data(GOV_PATH, '4. spot curve')
-    print(bank_data)
     bank_data['Date'] = bank_data['Date'].dt.day
-    gov_data['Date'] = gov_data['Date'].dt.day
+    
+    # gov_data = extract_data(GOV_PATH, '4. spot curve')
+    # gov_data['Date'] = gov_data['Date'].dt.day
 
-    chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
-    make_chart(chart_data)
-
+    # chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
+    # make_charts(chart_data)
+    make_chart('Bank', bank_data)
+    
     if config['send_tweet']:
         send_to_twitter(CHART_SAVE)
     if config['send_slack']:
@@ -183,7 +182,6 @@ def extract_data(wb_path, sheet_name):
     df = df_raw[cols]
     df /= 100
     df.loc[:, 'Date'] = df_raw.loc[:, 'Date']
-    print(df)
     return df
 
 
@@ -194,7 +192,101 @@ def load_config():
     return config
 
 
-def make_chart(dfs):
+def make_chart(df_name, df):
+    """
+    Creates a chart from two input dataframes, and saves it to a PNG file.
+    TODO: return filename, and merge with make_charts(?)
+    :param df_name: name of the data being used (e.g. bank, sovereign)
+    :param df: pandas dataframe containing yield curve data
+    :return: none
+    '''
+    """
+    write_log('Making chart')
+    projdir = os.path.dirname(os.path.realpath(__file__))
+
+    colours = plt.cm.Set2(np.linspace(0, 1, len(TERMS)+1))
+
+    fig = plt.figure(figsize=(4, 4))
+    f, ax = plt.subplots()
+
+    # set up chart format
+    ax.set_facecolor(BG_COLOUR)
+    ax.set_prop_cycle('color', colours)
+    ax.grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
+
+    # work out the start and end dates of the month, and format x axis accordingly
+    dmin = df.loc[0, 'Date']
+    dmax = monthrange(date.today().year, date.today().month)[1]
+    ax.set_xlim(1, dmax)
+
+    ax.plot(df.loc[:, 'Date'], df.loc[:, TERMS])
+
+    # plot a dashed line showing the start-of-month value for each term
+    for j, col in enumerate(df.loc[:, TERMS]):
+        ax.plot((dmin, dmax), (df.loc[dmin, col], df.loc[dmin, col]),
+                linestyle=":", linewidth=1)
+
+    # format axis labels
+    plt.title(df_name, **CHART_FONT)
+    ax.set_ybound(floor(ax.get_ybound()[0] * 1000) / 1000,
+                  ceil(ax.get_ybound()[1] * 1000) / 1000)
+    ax.set_yticklabels((f'{x*100 : 1.2f}%' for x in ax.get_yticks()),
+                       **CHART_FONT)
+    ax.set_xticklabels((f'{x : 1.0f}' for x in ax.get_xticks()),
+                       **CHART_FONT)
+    ax.set_xlabel("Day", **CHART_FONT)
+
+    ymin, ymax = ax.get_ylim()
+    yrange = ymax - ymin
+
+    dmin = df.loc[0:, 'Date']
+    drpt = df.loc[:-1, 'Date']
+    today = date.today()
+    dmax = monthrange(today.year, today.month)[1]
+
+    for j, col in enumerate(df.loc[:, TERMS]):
+        print(col)
+        # label near end of dashed line with relevant term (2yr, 10yr etc)
+        ax.annotate(str(col) + 'yr',
+                    xy=(dmax - 0.5, df[col][dmin] + 0.0150 * yrange),
+                    xycoords='data',
+                    ha='right',
+                    color=colours[j],
+                    fontsize=12,
+                    **CHART_FONT)
+        # label end of dashed line with rate from day one
+        start_rate = 100 * df.loc[0:, col]
+        print(start_rate)
+        ax.annotate('  {:1.2f}%'.format(start_rate),
+                    xy=(dmax, df[col][dmin] - 0.015 * yrange),
+                    xycoords='data',
+                    color=colours[j],
+                    fontsize=10,
+                    **CHART_FONT)
+        # label end of plotted line with current rate
+        # first, work out if displacement needed to avoid clash
+        labeloffset = 0
+        ratediff = df[col][drpt] - df[col][dmin]
+
+        if abs(ratediff) < 0.0002:
+            labeloffset = -0.0002
+
+        latest_rate = 100 * df[col][drpt]
+        # print(latest_rate)
+        ax.annotate('  {:1.2f}%'.format(latest_rate),
+                    xy=(drpt, df[col][drpt] + labeloffset),
+                    xycoords='data',
+                    color=colours[j],
+                    fontsize=10,
+                    **CHART_FONT)
+
+    plt.tight_layout(rect=[-0.010, 0, 0.90, 0.94])
+    plt.subplots_adjust(wspace=0.20)
+    plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
+    plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
+    
+    
+def make_charts(dfs):
     """
     Creates a chart from two input dataframes, and saves it to a PNG file.
     TODO: return filename
@@ -207,16 +299,14 @@ def make_chart(dfs):
 
     colours = plt.cm.Set2(np.linspace(0, 1, len(TERMS)+1))
 
-    fig = plt.figure(figsize=(4 * len(dfs), 4))
-    layouts = {1: (1, 1),
-               2: (1, 2)}
+    fig = plt.figure(figsize=(8, 4))
 
     axs = list()
 
     for i, data in enumerate(dfs, 1):
         dfname = data[0]
         df = data[1]
-        x, y = layouts[len(dfs)]
+        x, y = (1, 2)
         if i % 2 == 0:
             ax1 = axs[-1]
             axs.append(fig.add_subplot(x, y, i, sharey=ax1))
@@ -224,17 +314,21 @@ def make_chart(dfs):
         else:
             axs.append(fig.add_subplot(x, y, i))
 
+        # set up chart format
         axs[-1].set_facecolor(BG_COLOUR)
         axs[-1].set_prop_cycle('color', colours)
         axs[-1].grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
-        dmin = df.index.values[0]
+        # work out the start and end dates of the month, and format x axis accordingly
+        dmin = df.loc[0, 'Date']
         dmax = monthrange(date.today().year, date.today().month)[1]
         axs[-1].set_xlim(1, dmax)
-        axs[-1].plot(df)
 
-        for j, col in enumerate(df):
-            axs[-1].plot((dmin, dmax), (df[col][dmin], df[col][dmin]),
+        axs[-1].plot(df.loc[:, 'Date'], df.loc[:, TERMS])
+
+        # plot a dashed line showing the start-of-month value for each term
+        for j, col in enumerate(df.loc[:, TERMS]):
+            axs[-1].plot((dmin, dmax), (df.loc[dmin, col], df.loc[dmin, col]),
                          linestyle=":", linewidth=1)
 
         # format axis labels
@@ -334,6 +428,7 @@ if __name__ == '__main__':
     if mode == "production":
         daily_chart()
     elif mode == "development":
-        build_prediction_model()
+        # build_prediction_model()
+        daily_chart()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
