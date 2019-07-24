@@ -180,8 +180,10 @@ def extract_data(wb_path, sheet_name):
     cols = TERMS.copy()
     cols.sort()
     df = df_raw[cols]
+    df.columns = [f'{c}y' for c in cols]
     df /= 100
     df.loc[:, 'Date'] = df_raw.loc[:, 'Date']
+    print(df)
     return df
 
 
@@ -218,11 +220,12 @@ def make_chart(df_name, df):
     dmin = df.loc[0, 'Date']
     dmax = monthrange(date.today().year, date.today().month)[1]
     ax.set_xlim(1, dmax)
-
-    ax.plot(df.loc[:, 'Date'], df.loc[:, TERMS])
+    
+    cols = [f'{t}y' for t in TERMS]
+    ax.plot(df.loc[:, 'Date'], df.loc[:, cols])
 
     # plot a dashed line showing the start-of-month value for each term
-    for j, col in enumerate(df.loc[:, TERMS]):
+    for j, col in enumerate(df.loc[:, cols]):
         ax.plot((dmin, dmax), (df.loc[dmin, col], df.loc[dmin, col]),
                 linestyle=":", linewidth=1)
 
@@ -244,7 +247,7 @@ def make_chart(df_name, df):
     today = date.today()
     dmax = monthrange(today.year, today.month)[1]
 
-    for j, col in enumerate(df.loc[:, TERMS]):
+    for j, col in enumerate(df.loc[:, cols]):
         print(col)
         # label near end of dashed line with relevant term (2yr, 10yr etc)
         ax.annotate(str(col) + 'yr',
