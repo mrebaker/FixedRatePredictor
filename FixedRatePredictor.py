@@ -69,10 +69,12 @@ def build_prediction_model():
 
     wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
     data = extract_data(wb_file, '4. spot curve')
-
+    print(data)
+    data['period'] = data['Date'].dt.strfime('%y%m')
     for tenor in TERMS:
-        plt.plot(data[tenor])
-    plt.savefig('arch-plot', facecolor=BG_COLOUR, edgecolor='none')
+        start_date = data[tenor]['Date']
+
+
     # todo: calculate range change in month, correlate with actual rate changes
     # todo: use more than one archive yield file
 
@@ -108,8 +110,9 @@ def daily_chart():
 
     bank_data = extract_data(BANK_PATH, '4. spot curve')
     gov_data = extract_data(GOV_PATH, '4. spot curve')
-    bank_data['Dates'] = bank_data['Dates'].dt.day
-    gov_data['Dates'] = gov_data['Dates'].dt.day
+    print(bank_data)
+    bank_data['Date'] = bank_data['Date'].dt.day
+    gov_data['Date'] = gov_data['Date'].dt.day
 
     chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
     make_chart(chart_data)
@@ -148,7 +151,7 @@ def extract_data(wb_path, sheet_name):
     """
     projdir = os.path.dirname(os.path.realpath(__file__))
     worksheet = load_workbook(os.path.join(projdir, wb_path))[sheet_name]
-    worksheet['A4'].value = "Dates"
+    worksheet['A4'].value = "Date"
 
     # openpyxl max_row is unreliable with blank rows
     # so work out the max row manually
@@ -173,12 +176,14 @@ def extract_data(wb_path, sheet_name):
             rowdata.append(worksheet.cell(row=r, column=c).value)
         data.append(rowdata)
 
-    df = pd.DataFrame(data, columns=cols)
-    df.set_index('Dates', inplace=True)
-    TERMS.sort()
-    df = df[TERMS].dropna()
+    df_raw = pd.DataFrame(data, columns=cols)
+    # df.set_index('Date', inplace=True)
+    cols = TERMS.copy()
+    cols.sort()
+    df = df_raw[cols]
     df /= 100
-
+    df.loc[:, 'Date'] = df_raw.loc[:, 'Date']
+    print(df)
     return df
 
 
@@ -325,5 +330,10 @@ def write_log(log_text):
 
 if __name__ == '__main__':
     # todo: predictions
-    # daily_chart()
-    build_prediction_model()
+    mode = load_config()['mode']
+    if mode == "production":
+        daily_chart()
+    elif mode == "development":
+        build_prediction_model()
+    else:
+        print(f"Mode ({mode}) specified in config.yml is invalid")
