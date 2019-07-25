@@ -107,15 +107,16 @@ def daily_chart():
             raise OutdatedFileError
 
     bank_data = extract_data(BANK_PATH, '4. spot curve')
+
     bank_data.loc[:, 'Date'] = bank_data.loc[:, 'Date'].dt.day
-    
+
     # gov_data = extract_data(GOV_PATH, '4. spot curve')
     # gov_data['Date'] = gov_data['Date'].dt.day
 
     # chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
     # make_charts(chart_data)
     make_chart('Bank', bank_data)
-    
+
     if config['send_tweet']:
         send_to_twitter(CHART_SAVE)
     if config['send_slack']:
@@ -176,13 +177,13 @@ def extract_data(wb_path, sheet_name):
         data.append(rowdata)
 
     df_raw = pd.DataFrame(data, columns=cols)
-    # df.set_index('Date', inplace=True)
+
     cols = TERMS.copy()
     cols.sort()
     df = df_raw[cols]
     df.columns = [f'{c}y' for c in cols]
     df /= 100
-    df.loc[:, 'Date'] = df_raw.loc[:, 'Date']
+    df = df.assign(Date=df_raw.loc[:, 'Date'])
     return df
 
 
@@ -207,7 +208,7 @@ def make_chart(df_name, df):
 
     colours = plt.cm.Set2(np.linspace(0, 1, len(TERMS)+1))
 
-    fig = plt.figure(figsize=(4, 4))
+    plt.figure(figsize=(4, 4))
     f, ax = plt.subplots()
 
     # set up chart format
@@ -241,23 +242,22 @@ def make_chart(df_name, df):
     ymin, ymax = ax.get_ylim()
     yrange = ymax - ymin
 
-    dmin = df.iloc[0].loc['Date']
     drpt = df.iloc[-1].loc['Date']
     today = date.today()
     dmax = monthrange(today.year, today.month)[1]
 
     for j, col in enumerate(df.loc[:, cols]):
         # label near end of dashed line with relevant term (2yr, 10yr etc)
-        ax.annotate(str(col) + 'r',
-                    xy=(dmax - 0.5, df.iloc[0].loc[col] + 0.0150 * yrange),
-                    xycoords='data',
-                    ha='right',
-                    color=colours[j],
-                    fontsize=12,
-                    **CHART_FONT)
-        # label end of dashed line with rate from day one
+        # ax.annotate(str(col) + 'r',
+        #             xy=(dmax + 0, df.iloc[0].loc[col] + 0.0150 * yrange),
+        #             xycoords='data',
+        #             ha='right',
+        #             color=colours[j],
+        #             fontsize=12,
+        #             **CHART_FONT)
+        # label end of dashed line with rate from day one and the relevant term
         start_rate = 100 * df.loc[0, col]
-        ax.annotate('  {:1.2f}%'.format(start_rate),
+        ax.annotate(f'  {start_rate:1.2f}%  {col}r',
                     xy=(dmax, df.iloc[0].loc[col] - 0.015 * yrange),
                     xycoords='data',
                     color=colours[j],
@@ -266,12 +266,11 @@ def make_chart(df_name, df):
         # label end of plotted line with current rate
         # first, work out if displacement needed to avoid clash
         labeloffset = 0
-        rate_diff = df.iloc[-1].loc[col] - df.iloc[0].loc[col]
-
-        if abs(rate_diff) < 0.0002:
-            labeloffset = -0.0002
-
         latest_rate = 100 * df.iloc[-1].loc[col]
+        rate_diff = abs(latest_rate-start_rate)
+
+        if rate_diff < 0.02:
+            labeloffset = -0.0002
 
         ax.annotate('  {:1.2f}%'.format(latest_rate),
                     xy=(drpt, df.iloc[-1].loc[col] + labeloffset),
@@ -320,7 +319,7 @@ def make_charts(dfs):
         axs[-1].grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
         # work out the start and end dates of the month, and format x axis accordingly
-        dmin = df.loc[0, 'Date']
+        dmin = df.iloc[0].loc['Date']
         dmax = monthrange(date.today().year, date.today().month)[1]
         axs[-1].set_xlim(1, dmax)
 
