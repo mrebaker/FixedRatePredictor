@@ -206,10 +206,12 @@ def make_chart(df_name, df):
     write_log('Making chart')
     projdir = os.path.dirname(os.path.realpath(__file__))
 
-    colours = plt.cm.Set2(np.linspace(0, 1, len(TERMS)+1))
+    colours = ['#00E87E', '#0C87F2', '#5000DB', '#F20F7B', '#E85200', '#FF6B26']
+    if len(TERMS) > len(colours):
+        print("Falling back to colormap")
+        colours = plt.cm.Accent(np.linspace(0, 1, len(TERMS) + 1))
 
-    plt.figure(figsize=(4, 4))
-    f, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(5, 4))
 
     # set up chart format
     ax.set_facecolor(BG_COLOUR)
@@ -217,24 +219,22 @@ def make_chart(df_name, df):
     ax.grid(color=FG_COLOUR, linestyle='-', linewidth=0.5)
 
     # work out the start and end dates of the month, and format x axis accordingly
-    dmin = df.loc[0, 'Date']
+    dmin = df.iloc[0].loc['Date']
     dmax = monthrange(date.today().year, date.today().month)[1]
     ax.set_xlim(1, dmax)
-    
+
+    # plot the path of rates for each term
     cols = [f'{t}y' for t in TERMS]
     ax.plot(df.loc[:, 'Date'], df.loc[:, cols])
 
-    # plot a dashed line showing the start-of-month value for each term
-    for j, col in enumerate(df.loc[:, cols]):
-        ax.plot((dmin, dmax), (df.iloc[0].loc[col], df.iloc[0].loc[col]),
-                linestyle=":", linewidth=1)
-
     # format axis labels
     plt.title(df_name, **CHART_FONT)
+
+    ax.set_yticklabels((f'{y*100 : 1.2f}%' for y in ax.get_yticks()),
+                       **CHART_FONT)
+    # todo: next line doesn't seem to have any effect
     ax.set_ybound(floor(ax.get_ybound()[0] * 1000) / 1000,
                   ceil(ax.get_ybound()[1] * 1000) / 1000)
-    ax.set_yticklabels((f'{x*100 : 1.2f}%' for x in ax.get_yticks()),
-                       **CHART_FONT)
     ax.set_xticklabels((f'{x : 1.0f}' for x in ax.get_xticks()),
                        **CHART_FONT)
     ax.set_xlabel("Day", **CHART_FONT)
@@ -247,17 +247,12 @@ def make_chart(df_name, df):
     dmax = monthrange(today.year, today.month)[1]
 
     for j, col in enumerate(df.loc[:, cols]):
-        # label near end of dashed line with relevant term (2yr, 10yr etc)
-        # ax.annotate(str(col) + 'r',
-        #             xy=(dmax + 0, df.iloc[0].loc[col] + 0.0150 * yrange),
-        #             xycoords='data',
-        #             ha='right',
-        #             color=colours[j],
-        #             fontsize=12,
-        #             **CHART_FONT)
-        # label end of dashed line with rate from day one and the relevant term
-        start_rate = 100 * df.loc[0, col]
-        ax.annotate(f'  {start_rate:1.2f}%  {col}r',
+        start_rate = df.iloc[0].loc[col]
+        # plot a dashed line showing the start-of-month value for each term
+        ax.plot((dmin, dmax), (start_rate, start_rate),
+                linestyle=":", linewidth=1, color=colours[j])
+        # label end of dashed line with rate from day one and the relevant term e.g. 2yr, 10yr
+        ax.annotate(f'  {start_rate*100:1.2f}%  {col}r',
                     xy=(dmax, df.iloc[0].loc[col] - 0.015 * yrange),
                     xycoords='data',
                     color=colours[j],
@@ -266,21 +261,20 @@ def make_chart(df_name, df):
         # label end of plotted line with current rate
         # first, work out if displacement needed to avoid clash
         labeloffset = 0
-        latest_rate = 100 * df.iloc[-1].loc[col]
+        latest_rate = df.iloc[-1].loc[col]
         rate_diff = abs(latest_rate-start_rate)
 
-        if rate_diff < 0.02:
+        if rate_diff < 0.0002:
             labeloffset = -0.0002
 
-        ax.annotate('  {:1.2f}%'.format(latest_rate),
+        ax.annotate(f'  {latest_rate*100:1.2f}%',
                     xy=(drpt, df.iloc[-1].loc[col] + labeloffset),
                     xycoords='data',
                     color=colours[j],
                     fontsize=10,
                     **CHART_FONT)
 
-    plt.tight_layout(rect=[-0.010, 0, 0.90, 0.94])
-    plt.subplots_adjust(wspace=0.20)
+    # plt.tight_layout(rect=[0.9, 0.9, 0.9, 0.9])
     plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
     plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
     
