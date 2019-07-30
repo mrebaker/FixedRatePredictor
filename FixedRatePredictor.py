@@ -33,7 +33,6 @@ register_matplotlib_converters()
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-
 # set the swap rate tenors we are interested in
 TERMS = [1, 2, 3, 4, 5, 10]
 
@@ -42,10 +41,6 @@ GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.
 CHART_SAVE = 'chart.png'
 DB_PATH = 'db.csv'
 LOG_PATH = 'log.txt'
-# ZIP_PATH = os.path.join('temp', 'yield.zip')
-
-# chart appearance
-# PLOT_CMAP = 'Set2'
 BG_COLOUR = '#FAFAFD'
 FG_COLOUR = '#EEEEEE'
 CHART_FONT = {'fontname': 'Cabin'}
@@ -65,12 +60,22 @@ def build_prediction_model():
     zip_ref.close()
 
     wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
-    data = extract_data(wb_file, '4. spot curve')
-    print(data)
-    data['period'] = data['Date'].dt.strfime('%y%m')
-    for tenor in TERMS:
-        start_date = data[tenor]['Date']
+    boe_history = extract_data(wb_file, '4. spot curve')
+    boe_history['period'] = boe_history['Date'].dt.strftime('%y%m')
 
+    start_rates = boe_history.groupby(by='period').first()
+    end_rates = boe_history.groupby(by='period').last()
+    rate_diffs = end_rates - start_rates
+
+    shb_rates = load_shb_history()
+
+    for t in TERMS:
+        # todo: handle mid-month update
+        t_shb = shb_rates.loc[(shb_rates['fix_length'] == t) & (shb_rates['update_type'] == 'start_of_month')]
+        if len(t_shb) == 0:
+            break
+        # t_shb_start.['period'] = t_shb['date_from'].dt.strftime('%y%m')
+        t_boe = boe_history.loc[[f'{t}y', 'period']]
 
     # todo: calculate range change in month, correlate with actual rate changes
     # todo: use more than one archive yield file
@@ -180,7 +185,7 @@ def extract_data(wb_path, sheet_name):
 
     cols = TERMS.copy()
     cols.sort()
-    df = df_raw[cols]
+    df = df_raw[cols].dropna()
     df.columns = [f'{c}y' for c in cols]
     df /= 100
     df = df.assign(Date=df_raw.loc[:, 'Date'])
@@ -194,9 +199,25 @@ def load_config():
     return config
 
 
+def load_shb_history():
+    proj_dir = os.path.dirname(os.path.abspath(__file__))
+    s = pd.read_csv(os.path.join(proj_dir, 'model', 'fixed_rate_history.csv'),
+                    header=0,
+                    parse_dates=['valid_from'])
+    # todo: work with mid-month updates
+    s = s.loc[s['update_type'] == 'start_of_month']
+    s = s[['valid_from', 'rmc_rate', 'fix_length']]
+    r = s.pivot(index='valid_from', columns='fix_length', values='rmc_rate')
+    # limit to 2016 onwards to match SHB data
+    r = r.loc['2016-01-01':]
+    r = r.reset_index()
+    print(r)
+    return r
+
+
 def make_chart(df_name, df):
     """
-    Creates a chart from two input dataframes, and saves it to a PNG file.
+    Creates a chart from one input dataframes, and saves it to a PNG file.
     TODO: return filename, and merge with make_charts(?)
     :param df_name: name of the data being used (e.g. bank, sovereign)
     :param df: pandas dataframe containing yield curve data
@@ -390,7 +411,7 @@ def send_to_slack(imgpath):
     client = slack.WebClient(token=slack_token)
 
     response = client.files_upload(
-        channels='CLN9YJ6H4',
+        channels=config['slack_channel'],
         file=file_path)
     assert response["ok"]
 
@@ -423,5 +444,6 @@ if __name__ == '__main__':
     elif mode == "development":
         # build_prediction_model()
         daily_chart()
+        # load_shb_history()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
