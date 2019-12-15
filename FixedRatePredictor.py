@@ -115,17 +115,14 @@ def daily_chart():
 
     bank_data.loc[:, 'Date'] = bank_data.loc[:, 'Date'].dt.day
 
-    # gov_data = extract_data(GOV_PATH, '4. spot curve')
-    # gov_data['Date'] = gov_data['Date'].dt.day
-
-    # chart_data = [('Bank', bank_data), ('Sovereign', gov_data)]
-    # make_charts(chart_data)
     make_chart('Bank', bank_data)
 
     if config['send_tweet']:
         send_to_twitter(CHART_SAVE)
     if config['send_slack']:
         send_to_slack(CHART_SAVE)
+
+    predict_rate_change(bank_data)
 
     write_log('Done\n----------------')
 
@@ -399,6 +396,20 @@ def make_charts(dfs):
     plt.subplots_adjust(wspace=0.20)
     plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
     plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
+
+
+def predict_rate_change(data):
+    for rate in TERMS:
+        opening_rate = data[f'{rate}y'].iloc[0]
+        closing_rate = data[f'{rate}y'].iloc[-1]
+        # basic prediction model
+        rate_change = closing_rate - opening_rate
+        if rate_change > 0.001:
+            print(f'Looks like the {rate} year rate is going up, d={rate_change:.5}')
+        elif rate_change < -0.001:
+            print(f'Looks like the {rate} year rate is going down, d={rate_change:.5}')
+        else:
+            print(f'Looks like the {rate} year rate is stable, d={rate_change:.5}')
 
 
 def send_to_slack(imgpath):
