@@ -5,7 +5,6 @@ Gets files from the Bank of England website and charts the recent history of swa
 Should predict movements in fixed rates but doesn't do that yet.
 """
 
-
 import os
 import zipfile
 from calendar import monthrange
@@ -22,7 +21,7 @@ import urllib3
 import yaml
 from openpyxl import load_workbook
 from pandas.plotting import register_matplotlib_converters
-from pandas.tseries.offsets import BDay
+from pandas.tseries.offsets import BDay, BMonthEnd
 from retry import retry
 
 # have to import matplotlib separately first
@@ -404,12 +403,26 @@ def predict_rate_change(data):
         closing_rate = data[f'{rate}y'].iloc[-1]
         # basic prediction model
         rate_change = closing_rate - opening_rate
-        if rate_change > 0.001:
-            print(f'Looks like the {rate} year rate is going up, d={rate_change:.5}')
-        elif rate_change < -0.001:
-            print(f'Looks like the {rate} year rate is going down, d={rate_change:.5}')
+
+        month_end = BMonthEnd().rollforward(date.today())
+        if date.today() == month_end:
+            threshold = 0.001
         else:
-            print(f'Looks like the {rate} year rate is stable, d={rate_change:.5}')
+            threshold = 0.0025
+
+        de_minimis = 0.00001
+        if abs(rate_change) < de_minimis:
+            continue
+
+        if rate_change > threshold:
+            print(f'{rate} year rate has risen {rate_change:.5} - looks like rates are going up')
+        elif rate_change < -threshold:
+            print(f'{rate} year rate has fallen {rate_change:.5} - looks like rates are going down')
+        else:
+            if rate_change > 0:
+                print(f'{rate} year rate has only risen {rate_change:.4%}')
+            else:
+                print(f'{rate} year rate has only fallen {rate_change:.4%}')
 
 
 def send_to_slack(imgpath):
