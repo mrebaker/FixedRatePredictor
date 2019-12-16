@@ -398,6 +398,7 @@ def make_charts(dfs):
 
 
 def predict_rate_change(data):
+    messages = []
     for rate in TERMS:
         opening_rate = data[f'{rate}y'].iloc[0]
         closing_rate = data[f'{rate}y'].iloc[-1]
@@ -410,19 +411,16 @@ def predict_rate_change(data):
         else:
             threshold = 0.0025
 
-        de_minimis = 0.00001
-        if abs(rate_change) < de_minimis:
-            continue
-
         if rate_change > threshold:
-            print(f'{rate} year rate has risen {rate_change:.5} - looks like rates are going up')
+            msg = f'{rate} year rate has risen {rate_change:.4%} - looks like rates are going up'
         elif rate_change < -threshold:
-            print(f'{rate} year rate has fallen {rate_change:.5} - looks like rates are going down')
+            msg = f'{rate} year rate has fallen {rate_change:.4%} - looks like rates are going down'
         else:
-            if rate_change > 0:
-                print(f'{rate} year rate has only risen {rate_change:.4%}')
-            else:
-                print(f'{rate} year rate has only fallen {rate_change:.4%}')
+            continue
+        messages.append(msg)
+
+    if messages:
+        print('\n'.join(messages))
 
 
 def send_to_slack(imgpath):
