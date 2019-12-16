@@ -409,7 +409,7 @@ def predict_rate_change(data):
         if date.today() == month_end:
             threshold = 0.001
         else:
-            threshold = 0.0025
+            threshold = 0.001
 
         if rate_change > threshold:
             msg = f'{rate} year rate has risen {rate_change:.4%} - looks like rates are going up'
@@ -420,7 +420,12 @@ def predict_rate_change(data):
         messages.append(msg)
 
     if messages:
-        print('\n'.join(messages))
+        config = load_config()
+        slack_token = config['slack_login']['bot_token']
+        client = slack.WebClient(token=slack_token)
+        response = client.chat_postMessage(channel=config['slack_channel'],
+                                           text=messages)
+        assert response["ok"]
 
 
 def send_to_slack(imgpath):
