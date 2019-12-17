@@ -29,13 +29,13 @@ from retry import retry
 # have to import matplotlib separately first
 # then change away from x-using backend
 # then import pyplot
-import matplotlib
-register_matplotlib_converters()
-matplotlib.use('Agg')
+# import matplotlib
+# register_matplotlib_converters()
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # set the swap rate tenors we are interested in
-TERMS = [1, 2, 3, 4, 5, 10]
+TERMS = [2, 3, 4, 5, 10]
 
 BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
 GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
@@ -72,11 +72,20 @@ def build_prediction_model():
 
     for t in TERMS:
         # todo: handle mid-month update
-        t_shb = shb_rates.loc[(shb_rates['fix_length'] == t) & (shb_rates['update_type'] == 'start_of_month')]
+        t_shb = shb_rates[[t, 'valid_from']]
         if len(t_shb) == 0:
-            break
-        # t_shb_start.['period'] = t_shb['date_from'].dt.strftime('%y%m')
-        t_boe = boe_history.loc[[f'{t}y', 'period']]
+            continue
+        t_shb['shb_period'] = t_shb['valid_from'].dt.strftime('%y%m')
+        t_shb['shb_change'] = t_shb[t].diff()
+        t_boe = boe_history[[f'{t}y', 'period']]
+        t_rate_change = pd.DataFrame(rate_diffs[f'{t}y'])
+        df_chart = pd.merge(t_shb,
+                            t_rate_change,
+                            left_on='shb_period',
+                            right_index=True,
+                            how='inner')
+        plt.scatter(df_chart['shb_change'], df_chart[f'{t}y'])
+        plt.show()
 
     # todo: calculate range change in month, correlate with actual rate changes
     # todo: use more than one archive yield file
@@ -210,7 +219,6 @@ def load_shb_history():
     # limit to 2016 onwards to match SHB data
     r = r.loc['2016-01-01':]
     r = r.reset_index()
-    print(r)
     return r
 
 
