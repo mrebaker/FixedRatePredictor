@@ -84,7 +84,10 @@ def build_prediction_model():
                             left_on='shb_period',
                             right_index=True,
                             how='inner')
-        plt.scatter(df_chart['shb_change'], df_chart[f'{t}y'])
+        plt.scatter(df_chart[f'{t}y'], df_chart['shb_change'])
+        plt.title(f'{t} year fixed rate change')
+        plt.xlabel('BOE yield change')
+        plt.ylabel('SHB rate change')
         plt.show()
 
     # todo: calculate range change in month, correlate with actual rate changes
