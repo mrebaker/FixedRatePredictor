@@ -96,6 +96,11 @@ def chart_rate_moves():
     boe['fom'] = boe['Date'].apply(lambda x: BMonthBegin().rollback(x))
     boe = boe[boe['Date'] == boe['fom']]
 
+    # add in monthly changes
+    for rate in TERMS:
+        boe[f'{rate}ydiff'] = boe[f'{rate}y'].diff()
+        shb[f'{rate}diff'] = shb[rate].diff()
+
     rows = 1
     cols = 5
     fig, axs = plt.subplots(rows, cols,
@@ -106,8 +111,8 @@ def chart_rate_moves():
         row = idx % rows
         col = idx // rows
         ax = axs[row][col]
-        ax.plot(boe['Date'], boe[f'{rate}y'])
-        ax.plot(shb['valid_from'], shb[rate])
+        ax.plot(boe['Date'], boe[f'{rate}ydiff'])
+        ax.plot(shb['valid_from'], shb[f'{rate}diff'])
         ax.set_title(f'{rate} year rate')
     plt.show()
 
@@ -253,6 +258,7 @@ def load_shb_history():
     r = s.pivot(index='valid_from', columns='fix_length', values='rmc_rate')
     # limit to 2016 onwards to match SHB data
     r = r.loc['2016-01-01':]
+    r['period'] = r['valid_from'].dt.strftime('%y%m')
     r = r.reset_index()
     return r
 
