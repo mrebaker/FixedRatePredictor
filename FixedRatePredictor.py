@@ -84,7 +84,13 @@ def build_prediction_model():
 
 
 def chart_rate_moves():
-    pass
+    boe_history = load_boe_history()
+    shb_history = load_shb_history()
+    for rate in TERMS:
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.plot(boe_history['Date'], boe_history[f'{rate}y'])
+        ax.plot(shb_history['valid_from'], shb_history[rate])
+        plt.show()
 
 
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
@@ -491,8 +497,6 @@ if __name__ == '__main__':
     if mode == "production":
         daily_chart()
     elif mode == "development":
-        build_prediction_model()
-        # daily_chart()
-        # load_shb_history()
+        chart_rate_moves()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
