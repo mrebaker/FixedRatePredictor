@@ -101,6 +101,8 @@ def chart_rate_moves():
         boe[f'{rate}ydiff'] = boe[f'{rate}y'].diff()
         shb[f'{rate}diff'] = shb[rate].diff()
 
+    df = boe.merge(shb, on='period', how='inner')
+
     rows = 1
     cols = 5
     fig, axs = plt.subplots(rows, cols,
@@ -111,9 +113,13 @@ def chart_rate_moves():
         row = idx % rows
         col = idx // rows
         ax = axs[row][col]
-        ax.plot(boe['Date'], boe[f'{rate}ydiff'])
-        ax.plot(shb['valid_from'], shb[f'{rate}diff'])
+        residual = df[f'{rate}diff'] - df[f'{rate}ydiff']
+        # ax.plot(df['Date'], residual, 'r+', label='residual')
+        # ax.plot(boe['Date'], boe[f'{rate}ydiff'], 'g', label='boe diff')
+        # ax.plot(shb['valid_from'], shb[f'{rate}diff'], 'c.', label='shb diff')
+        ax.plot(df[f'{rate}ydiff'], df[f'{rate}diff'], 'b+')
         ax.set_title(f'{rate} year rate')
+        ax.legend()
     plt.show()
 
 
@@ -258,8 +264,8 @@ def load_shb_history():
     r = s.pivot(index='valid_from', columns='fix_length', values='rmc_rate')
     # limit to 2016 onwards to match SHB data
     r = r.loc['2016-01-01':]
-    r['period'] = r['valid_from'].dt.strftime('%y%m')
     r = r.reset_index()
+    r['period'] = r['valid_from'].dt.strftime('%y%m')
     return r
 
 
