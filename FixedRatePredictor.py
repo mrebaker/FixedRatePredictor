@@ -5,6 +5,7 @@ Gets files from the Bank of England website and charts the recent history of swa
 Should predict movements in fixed rates but doesn't do that yet.
 """
 
+# Standard library imports
 import os
 import zipfile
 from calendar import monthrange
@@ -12,6 +13,7 @@ from datetime import date
 from math import ceil, floor
 from time import localtime, strftime
 
+# Third party imports
 import certifi
 import numpy as np
 import pandas as pd
@@ -199,7 +201,8 @@ def load_shb_history():
     proj_dir = os.path.dirname(os.path.abspath(__file__))
     s = pd.read_csv(os.path.join(proj_dir, 'model', 'fixed_rate_history.csv'),
                     header=0,
-                    parse_dates=['valid_from'])
+                    parse_dates=['valid_from'],
+                    dayfirst=True)
     # todo: work with mid-month updates
     s = s.loc[s['update_type'] == 'start_of_month']
     s = s[['valid_from', 'rmc_rate', 'fix_length']]
@@ -470,8 +473,8 @@ if __name__ == '__main__':
     if mode == "production":
         daily_chart()
     elif mode == "development":
-        # build_prediction_model()
-        daily_chart()
+        build_prediction_model()
+        # daily_chart()
         # load_shb_history()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
