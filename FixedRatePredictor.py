@@ -23,7 +23,7 @@ import urllib3
 import yaml
 from openpyxl import load_workbook
 from pandas.plotting import register_matplotlib_converters
-from pandas.tseries.offsets import BDay, BMonthEnd
+from pandas.tseries.offsets import BDay, BMonthBegin, BMonthEnd
 from retry import retry
 
 # have to import matplotlib separately first
@@ -84,13 +84,32 @@ def build_prediction_model():
 
 
 def chart_rate_moves():
-    boe_history = load_boe_history()
-    shb_history = load_shb_history()
-    for rate in TERMS:
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.plot(boe_history['Date'], boe_history[f'{rate}y'])
-        ax.plot(shb_history['valid_from'], shb_history[rate])
-        plt.show()
+    boe = load_boe_history()
+    shb = load_shb_history()
+    # filter BOE data to match SHB date range
+    shb_min = shb['valid_from'].min()
+    shb_max = shb['valid_from'].max()
+    mask = (boe['Date'] >= shb_min) & (boe['Date'] <= shb_max)
+    boe = boe.loc[mask]
+
+    # reduce BOE data to start-of-month values
+    boe['fom'] = boe['Date'].apply(lambda x: BMonthBegin().rollback(x))
+    boe = boe[boe['Date'] == boe['fom']]
+
+    rows = 1
+    cols = 5
+    fig, axs = plt.subplots(rows, cols,
+                            figsize=(15, 4),
+                            squeeze=False,
+                            sharey=True)
+    for idx, rate in enumerate(TERMS):
+        row = idx % rows
+        col = idx // rows
+        ax = axs[row][col]
+        ax.plot(boe['Date'], boe[f'{rate}y'])
+        ax.plot(shb['valid_from'], shb[rate])
+        ax.set_title(f'{rate} year rate')
+    plt.show()
 
 
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
