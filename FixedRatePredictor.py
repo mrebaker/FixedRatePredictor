@@ -17,6 +17,7 @@ from time import localtime, strftime
 import certifi
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
 import slack
 import tweepy
 import urllib3
@@ -53,34 +54,34 @@ class OutdatedFileError(Exception):
 
 
 def build_prediction_model():
-    boe_history = load_boe_history()
-    start_rates = boe_history.groupby(by='period').first()
-    end_rates = boe_history.groupby(by='period').last()
-    rate_diffs = end_rates - start_rates
+    boe = load_boe_history()
+    shb = load_shb_history()
+    # filter BOE data to match SHB date range
+    shb_min = shb['valid_from'].min()
+    shb_max = shb['valid_from'].max()
+    mask = (boe['Date'] >= shb_min) & (boe['Date'] <= shb_max)
+    boe = boe.loc[mask]
 
-    shb_rates = load_shb_history()
+    # reduce BOE data to start-of-month values
+    boe['fom'] = boe['Date'].apply(lambda x: BMonthBegin().rollback(x))
+    boe = boe[boe['Date'] == boe['fom']]
 
-    for t in TERMS:
-        # todo: handle mid-month update
-        t_shb = shb_rates[[t, 'valid_from']]
-        if len(t_shb) == 0:
-            continue
-        t_shb['shb_period'] = t_shb['valid_from'].dt.strftime('%y%m')
-        t_shb['shb_change'] = t_shb[t].diff()
-        t_rate_change = pd.DataFrame(rate_diffs[f'{t}y'])
-        df_chart = pd.merge(t_shb,
-                            t_rate_change,
-                            left_on='shb_period',
-                            right_index=True,
-                            how='inner')
-        plt.scatter(df_chart[f'{t}y'], df_chart['shb_change'])
-        plt.title(f'{t} year fixed rate change')
-        plt.xlabel('BOE yield change')
-        plt.ylabel('SHB rate change')
-        plt.show()
+    # add in monthly changes
+    for term in TERMS:
+        boe[f'{term}ydiff'] = boe[f'{term}y'].diff()
+        shb[f'{term}diff'] = shb[term].diff()
 
-    # todo: calculate range change in month, correlate with actual rate changes
-    # todo: use more than one archive yield file
+    df = boe.merge(shb, on='period', how='inner')
+    # drop the first row - which will contain NaN
+    df = df.iloc[1:-1]
+    for term in TERMS:
+        X = df[f'{term}ydiff'].values.reshape(-1, 1)
+        y = df[f'{term}diff'].values.reshape(-1, 1)
+        model = LinearRegression().fit(X, y)
+        print(f'{term} year model ----------------')
+        print(f'r^2 = {model.score(X, y):.5}')
+        print(f'yhat = {model.intercept_[0]:.5} + {model.coef_[0][0]:.5}x')
+        print(f'------------------------------')
 
 
 def chart_rate_moves():
@@ -528,6 +529,6 @@ if __name__ == '__main__':
     if mode == "production":
         daily_chart()
     elif mode == "development":
-        chart_rate_moves()
+        build_prediction_model()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
