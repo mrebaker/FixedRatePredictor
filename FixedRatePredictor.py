@@ -53,17 +53,7 @@ class OutdatedFileError(Exception):
 
 
 def build_prediction_model():
-    file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/blcnomddata.zip')
-    proj_dir = os.path.dirname(os.path.realpath(__file__))
-    zip_folder = os.path.join(proj_dir, 'temp', 'yield-archive')
-    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
-    zip_ref.extractall(zip_folder)
-    zip_ref.close()
-
-    wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
-    boe_history = extract_data(wb_file, '4. spot curve')
-    boe_history['period'] = boe_history['Date'].dt.strftime('%y%m')
-
+    boe_history = load_boe_history()
     start_rates = boe_history.groupby(by='period').first()
     end_rates = boe_history.groupby(by='period').last()
     rate_diffs = end_rates - start_rates
@@ -77,7 +67,6 @@ def build_prediction_model():
             continue
         t_shb['shb_period'] = t_shb['valid_from'].dt.strftime('%y%m')
         t_shb['shb_change'] = t_shb[t].diff()
-        t_boe = boe_history[[f'{t}y', 'period']]
         t_rate_change = pd.DataFrame(rate_diffs[f'{t}y'])
         df_chart = pd.merge(t_shb,
                             t_rate_change,
@@ -92,6 +81,10 @@ def build_prediction_model():
 
     # todo: calculate range change in month, correlate with actual rate changes
     # todo: use more than one archive yield file
+
+
+def chart_rate_moves():
+    pass
 
 
 @retry(OutdatedFileError, delay=60, backoff=5, max_delay=7500)
@@ -207,6 +200,20 @@ def load_config():
     config_path = os.path.join(proj_dir, "config.yml")
     config = yaml.safe_load(open(config_path))
     return config
+
+
+def load_boe_history():
+    file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/blcnomddata.zip')
+    proj_dir = os.path.dirname(os.path.realpath(__file__))
+    zip_folder = os.path.join(proj_dir, 'temp', 'yield-archive')
+    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
+    zip_ref.extractall(zip_folder)
+    zip_ref.close()
+
+    wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
+    boe_hist = extract_data(wb_file, '4. spot curve')
+    boe_hist['period'] = boe_hist['Date'].dt.strftime('%y%m')
+    return boe_hist
 
 
 def load_shb_history():
