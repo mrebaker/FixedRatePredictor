@@ -9,8 +9,10 @@ Should predict movements in fixed rates but doesn't do that yet.
 import os
 import zipfile
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime as dt
 from math import ceil, floor
+import pickle
+import sqlite3
 from time import localtime, strftime
 
 # Third party imports
@@ -41,7 +43,7 @@ TERMS = [2, 3, 4, 5, 10]
 BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
 GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
 CHART_SAVE = 'chart.png'
-DB_PATH = 'db.csv'
+DB_PATH = 'fixed_rate.db'
 LOG_PATH = 'log.txt'
 BG_COLOUR = '#FAFAFD'
 FG_COLOUR = '#EEEEEE'
@@ -78,10 +80,8 @@ def build_prediction_model():
         X = df[f'{term}ydiff'].values.reshape(-1, 1)
         y = df[f'{term}diff'].values.reshape(-1, 1)
         model = LinearRegression().fit(X, y)
-        print(f'{term} year model ----------------')
-        print(f'r^2 = {model.score(X, y):.5}')
-        print(f'yhat = {model.intercept_[0]:.5} + {model.coef_[0][0]:.5}x')
-        print(f'------------------------------')
+        r2 = model.score(X, y)
+        store(term, model, 'sklearn_LinearRegression', r2)
 
 
 def chart_rate_moves():
@@ -168,6 +168,12 @@ def daily_chart():
     predict_rate_change(bank_data)
 
     write_log('Done\n----------------')
+
+
+def db_connect():
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    return con, cur
 
 
 def get_file(file_url):
@@ -514,6 +520,29 @@ def send_to_twitter(imgpath):
     auth.set_access_token(twit_auth['access_key'], twit_auth['access_secret'])
     api = tweepy.API(auth)
     api.update_with_media(os.path.join(projdir, imgpath))
+
+
+def store(term, model_obj, model_type, r_2):
+    conn, curs = db_connect()
+    curs.execute('''CREATE TABLE IF NOT EXISTS
+                    model (
+                    id PRIMARY KEY,
+                    pickle BLOB,
+                    model_type TEXT,
+                    date_stored TEXT,
+                    rate_term REAL,
+                    r_2 REAL)''')
+    pickled_model = pickle.dumps(model_obj, protocol=2)
+    values = (sqlite3.Binary(pickled_model),
+              model_type,
+              dt.now(),
+              term,
+              r_2)
+
+    curs.execute('''INSERT INTO model 
+                    (pickle, model_type, date_stored, rate_term, r_2)
+                    VALUES (?, ?, ?, ?, ?)''', values)
+    conn.commit()
 
 
 def write_log(log_text):
