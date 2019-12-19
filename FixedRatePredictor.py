@@ -52,6 +52,11 @@ CHART_FONT = {'fontname': 'Cabin'}
 
 # custom error in case BoE website not updated
 class OutdatedFileError(Exception):
+    """
+    Bank of England file normally uploaded around midday, but sometimes isn't. This class prompts
+    a retry of the file download if the file hasn't yet been updated.
+    """
+
     pass
 
 
@@ -142,14 +147,14 @@ def daily_chart():
     zip_ref.close()
 
     check_date = config['check_date']
-    
+
     if check_date:
         workbook = load_workbook(filename=os.path.join(proj_dir, BANK_PATH))
         worksheet = workbook['4. spot curve']
         lastrow = str(workbook['4. spot curve'].max_row)
         filedate = worksheet['A' + lastrow].value.date()
         prevday = date.today() - BDay(1)
-    
+
         if filedate != prevday.date():
             write_log('Date not OK, retrying...')
             raise OutdatedFileError
@@ -359,8 +364,8 @@ def make_chart(df_name, df):
     # plt.tight_layout(rect=[0.9, 0.9, 0.9, 0.9])
     plt.suptitle(strftime('Swap rates, %b %Y', localtime()), y=0.98, **CHART_FONT)
     plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
-    
-    
+
+
 def make_charts(dfs):
     """
     Creates a chart from two input dataframes, and saves it to a PNG file.
@@ -539,7 +544,7 @@ def store(term, model_obj, model_type, r_2):
               term,
               r_2)
 
-    curs.execute('''INSERT INTO model 
+    curs.execute('''INSERT INTO model
                     (pickle, model_type, date_stored, rate_term, r_2)
                     VALUES (?, ?, ?, ?, ?)''', values)
     conn.commit()
@@ -553,7 +558,6 @@ def write_log(log_text):
 
 
 if __name__ == '__main__':
-    # todo: predictions
     mode = load_config()['mode']
     if mode == "production":
         daily_chart()
