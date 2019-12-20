@@ -469,34 +469,41 @@ def make_charts(dfs):
 
 def predict_rate_change(data):
     messages = []
-    for rate in TERMS:
-        opening_rate = data[f'{rate}y'].iloc[0]
-        closing_rate = data[f'{rate}y'].iloc[-1]
+    for term in TERMS:
+        opening_rate = data[f'{term}y'].iloc[0]
+        closing_rate = data[f'{term}y'].iloc[-1]
         # basic prediction model
         rate_change = closing_rate - opening_rate
+        _, curs = db_connect()
+        pickled_model = curs.execute('''SELECT pickle 
+                                        FROM model 
+                                        WHERE rate_term = ?
+                                        ORDER BY r_2 DESC
+                                        LIMIT 1''', (term,)).fetchone()
+        model = pickle.loads(pickled_model[0])
+        prediction = model.predict([[rate_change]])
+        predicted_change = round_nearest(prediction[0][0], 0.0005)
 
-        month_end = BMonthEnd().rollforward(date.today())
-        if date.today() == month_end:
-            threshold = 0.001
-        else:
-            threshold = 0.0025
+        # month_end = BMonthEnd().rollforward(date.today())
 
-        if rate_change > threshold:
-            msg = f'{rate} year rate has risen {rate_change:.4%} - looks like rates are going up'
-        elif rate_change < -threshold:
-            msg = f'{rate} year rate has fallen {rate_change:.4%} - looks like rates are going down'
-        else:
-            continue
+        msg = f'{term}\t\t{rate_change:.4%}\t{predicted_change:.2%}'
+
         messages.append(msg)
 
     if messages:
+        messages.insert(0, 'term\tchange\t\tprediction')
         msg_text = '\n'.join(messages)
+        print(msg_text)
         config = load_config()
         slack_token = config['slack_login']['bot_token']
         client = slack.WebClient(token=slack_token)
         response = client.chat_postMessage(channel=config['slack_channel'],
                                            text=msg_text)
         assert response["ok"]
+
+
+def round_nearest(x, a):
+    return round(x / a) * a
 
 
 def send_to_slack(imgpath):
@@ -562,6 +569,6 @@ if __name__ == '__main__':
     if mode == "production":
         daily_chart()
     elif mode == "development":
-        build_prediction_model()
+        daily_chart()
     else:
         print(f"Mode ({mode}) specified in config.yml is invalid")
