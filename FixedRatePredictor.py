@@ -13,6 +13,7 @@ from datetime import date, datetime as dt
 from math import ceil, floor
 import pickle
 import sqlite3
+import sys
 from time import localtime, strftime
 
 # Third party imports
@@ -32,9 +33,9 @@ from retry import retry
 # have to import matplotlib separately first
 # then change away from x-using backend
 # then import pyplot
-# import matplotlib
-# register_matplotlib_converters()
-# matplotlib.use('Agg')
+import matplotlib
+register_matplotlib_converters()
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # set the swap rate tenors we are interested in
@@ -565,10 +566,20 @@ def write_log(log_text):
 
 
 if __name__ == '__main__':
-    mode = load_config()['mode']
-    if mode == "production":
-        daily_chart()
-    elif mode == "development":
+    environment = load_config()['mode']
+    if environment == "production":
+        if len(sys.argv) != 2:
+            raise SyntaxError('FRP takes exactly one argument.')
+
+        mode = sys.argv[1]
+        if mode == 'd':
+            daily_chart()
+        elif mode == 'm':
+            build_prediction_model()
+        else:
+            raise SyntaxError('Valid modes are d (produce daily chart) or m (build prediction model)')
+
+    elif environment == "development":
         daily_chart()
     else:
-        print(f"Mode ({mode}) specified in config.yml is invalid")
+        print(f"Mode ({environment}) specified in config.yml is invalid")
