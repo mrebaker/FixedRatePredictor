@@ -591,5 +591,6 @@ if __name__ == '__main__':
 
     elif environment == "development":
         daily_chart()
+
     else:
         print(f"Mode ({environment}) specified in config.yml is invalid")
