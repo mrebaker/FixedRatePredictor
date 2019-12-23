@@ -260,8 +260,13 @@ def load_boe_history():
     file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/blcnomddata.zip')
     proj_dir = os.path.dirname(os.path.realpath(__file__))
     zip_folder = os.path.join(proj_dir, 'temp', 'yield-archive')
-    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
-    zip_ref.extractall(zip_folder)
+    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, 'temp', file_name), 'r')
+    try:
+        zip_ref.extractall(zip_folder)
+    except FileNotFoundError:
+        os.mkdir(zip_folder)
+        zip_ref.extractall(zip_folder)
+
     zip_ref.close()
 
     wb_file = os.path.join(zip_folder, 'BLC Nominal daily data_2016 to present.xlsx')
