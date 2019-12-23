@@ -192,12 +192,17 @@ def get_file(file_url):
 
     file_name = file_url.rsplit('/', 1)[-1]
 
-    write_path = os.path.join('temp', f'{date.today().strftime("%Y%m%d")} {file_name}')
+    save_name = os.path.join('temp', f'{date.today().strftime("%Y%m%d")} {file_name}')
 
-    with open(os.path.join(projdir, write_path), 'w+b') as f:
-        f.write(r.data)
+    try:
+        with open(os.path.join(projdir, 'temp', save_name), 'w+b') as f:
+            f.write(r.data)
+    except FileNotFoundError:
+        os.mkdir(os.path.join(projdir, 'temp'))
+        with open(os.path.join(projdir, 'temp', save_name), 'w+b') as f:
+            f.write(r.data)
 
-    return write_path
+    return save_name
 
 
 def extract_data(wb_path, sheet_name):
