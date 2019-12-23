@@ -140,10 +140,10 @@ def daily_chart():
         file_url = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
         file_name = get_file(file_url)
     else:
-        file_name = os.path.join('temp', 'yield.zip')
+        file_name = os.path.join('yield.zip')
 
     proj_dir = os.path.dirname(os.path.realpath(__file__))
-    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, file_name), 'r')
+    zip_ref = zipfile.ZipFile(os.path.join(proj_dir, 'temp', file_name), 'r')
     zip_ref.extractall(os.path.join(proj_dir, 'temp', 'yields'))
     zip_ref.close()
 
