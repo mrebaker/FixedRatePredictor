@@ -192,7 +192,7 @@ def get_file(file_url):
 
     file_name = file_url.rsplit('/', 1)[-1]
 
-    save_name = os.path.join('temp', f'{date.today().strftime("%Y%m%d")} {file_name}')
+    save_name = os.path.join(f'{date.today().strftime("%Y%m%d")} {file_name}')
 
     try:
         with open(os.path.join(projdir, 'temp', save_name), 'w+b') as f:
