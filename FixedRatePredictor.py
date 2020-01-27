@@ -137,8 +137,7 @@ def daily_chart():
     config = load_config()
 
     if config['download_file']:
-        file_url = 'https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip'
-        file_name = get_file(file_url)
+        file_name = get_file('https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip')
     else:
         file_name = os.path.join('yield.zip')
 
@@ -208,7 +207,8 @@ def get_file(file_url):
 def extract_data(wb_path, sheet_name):
     """
     Returns a dataframe containing the data from a given path and sheet
-    :param wb_path:
+    :param sheet_name: name of worksheet to convert to dataframe
+    :param wb_path: path to workbook
     :return:
     """
     projdir = os.path.dirname(os.path.realpath(__file__))
@@ -286,8 +286,7 @@ def load_shb_history():
     s = s[['valid_from', 'rmc_rate', 'fix_length']]
     r = s.pivot(index='valid_from', columns='fix_length', values='rmc_rate')
     # limit to 2016 onwards to match SHB data
-    r = r.loc['2016-01-01':]
-    r = r.reset_index()
+    r = r.loc['2016-01-01':].reset_index()
     r['period'] = r['valid_from'].dt.strftime('%y%m')
     return r
 
@@ -486,6 +485,7 @@ def predict_rate_change(data):
         # basic prediction model
         rate_change = closing_rate - opening_rate
         _, curs = db_connect()
+
         pickled_model = curs.execute('''SELECT pickle 
                                         FROM model 
                                         WHERE rate_term = ?
