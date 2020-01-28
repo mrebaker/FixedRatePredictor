@@ -21,6 +21,7 @@ import certifi
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 import slack
 import tweepy
 import urllib3
@@ -83,11 +84,16 @@ def build_prediction_model():
     # drop the first row - which will contain NaN
     df = df.iloc[1:-1]
     for term in TERMS:
-        X = df[f'{term}ydiff'].values.reshape(-1, 1)
-        y = df[f'{term}diff'].values.reshape(-1, 1)
-        model = LinearRegression().fit(X, y)
-        r2 = model.score(X, y)
-        store(term, model, 'sklearn_LinearRegression', r2)
+        X = df[[f'{term}ydiff']]
+        y = df[[f'{term}diff']]
+
+        # using default 5-split
+        tss = TimeSeriesSplit(n_splits=5).split(X)
+        model = LinearRegression()
+        scores = cross_val_score(model, X, y, cv=tss)
+        print(scores)
+        r2 = scores.mean()
+        store(term, model, 'sklearn_LinearRegression_CV', r2)
 
 
 def chart_rate_moves():
@@ -590,7 +596,7 @@ if __name__ == '__main__':
             raise SyntaxError('Valid modes are d (produce daily chart) or m (build prediction model)')
 
     elif environment == "development":
-        daily_chart()
+        build_prediction_model()
 
     else:
         print(f"Mode ({environment}) specified in config.yml is invalid")
