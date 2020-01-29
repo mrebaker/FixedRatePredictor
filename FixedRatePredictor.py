@@ -482,6 +482,25 @@ def make_charts(dfs):
     plt.savefig(os.path.join(projdir, CHART_SAVE), facecolor=BG_COLOUR, edgecolor='none')
 
 
+def model_paramters():
+    """
+    Prints the parameters and r^2 for all models.
+    :return: Nothing
+    """
+    _, curs = db_connect()
+    rows = curs.execute('''SELECT pickle, modeL_type, date_stored, rate_term, r_2 FROM model
+                           ORDER BY rate_term ASC''')
+
+    for row in rows:
+        pickled, model_type, date_stored, rate_term, r_2 = row
+        model = pickle.loads(pickled)
+        try:
+            coef = model.coef_
+        except AttributeError:
+            coef = None
+        print(f'{rate_term} ({date_stored} {r_2} {coef}')
+
+
 def predict_rate_change(data):
     messages = []
     for term in TERMS:
@@ -595,7 +614,7 @@ if __name__ == '__main__':
             raise SyntaxError('Valid modes are d (produce daily chart) or m (build prediction model)')
 
     elif environment == "development":
-        build_prediction_model()
+        model_paramters()
 
     else:
         print(f"Mode ({environment}) specified in config.yml is invalid")
