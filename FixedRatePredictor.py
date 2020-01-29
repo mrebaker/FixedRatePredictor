@@ -89,9 +89,8 @@ def build_prediction_model():
 
         # using default 5-split
         tss = TimeSeriesSplit(n_splits=5).split(X)
-        model = LinearRegression()
+        model = LinearRegression().fit(X, y)
         scores = cross_val_score(model, X, y, cv=tss)
-        print(scores)
         r2 = scores.mean()
         store(term, model, 'sklearn_LinearRegression_CV', r2)
 
