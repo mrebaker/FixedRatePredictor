@@ -528,8 +528,6 @@ def predict_rate_change(data):
         prediction = model.predict([[rate_change]])
         predicted_change = round_nearest(prediction[0][0], 0.0005)
 
-        # month_end = BMonthEnd().rollforward(date.today())
-
         msg = f'{term}\t\t{rate_change:.4%}\t{predicted_change:.2%}'
 
         messages.append(msg)
@@ -537,7 +535,6 @@ def predict_rate_change(data):
     if messages:
         messages.insert(0, 'term\tchange\t\tprediction')
         msg_text = '\n'.join(messages)
-        print(msg_text)
         config = load_config()
         if config['send_slack']:
             slack_token = config['slack_login']['bot_token']
@@ -545,6 +542,8 @@ def predict_rate_change(data):
             response = client.chat_postMessage(channel=config['slack_channel'],
                                                text=msg_text)
             assert response["ok"]
+        else:
+            print(msg_text)
 
 
 def round_nearest(x, a):
