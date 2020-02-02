@@ -21,6 +21,7 @@ from time import localtime, strftime
 import certifi
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 import slack
@@ -511,9 +512,18 @@ def predict_rate_change(data):
 
         pickled_model = curs.execute('''SELECT pickle 
                                         FROM model 
-                                        WHERE rate_term = ?
+                                        WHERE rate_term = ? and sklearn_version = ?
                                         ORDER BY r_2 DESC
-                                        LIMIT 1''', (term,)).fetchone()
+                                        LIMIT 1''', (term, sklearn.__version__)).fetchone()
+
+        if not pickled_model:
+            build_prediction_model()
+            pickled_model = curs.execute('''SELECT pickle 
+                                                    FROM model 
+                                                    WHERE rate_term = ? and sklearn_version = ?
+                                                    ORDER BY r_2 DESC
+                                                    LIMIT 1''', (term, sklearn.__version__)).fetchone()
+
         model = pickle.loads(pickled_model[0])
         prediction = model.predict([[rate_change]])
         predicted_change = round_nearest(prediction[0][0], 0.0005)
