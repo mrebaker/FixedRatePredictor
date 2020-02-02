@@ -11,6 +11,7 @@ import zipfile
 from calendar import monthrange
 from datetime import date, datetime as dt
 from math import ceil, floor
+from pathlib import Path
 import pickle
 import sqlite3
 import sys
@@ -42,14 +43,13 @@ import matplotlib.pyplot as plt
 # set the swap rate tenors we are interested in
 TERMS = [2, 3, 4, 5, 10]
 
-BANK_PATH = os.path.join('temp', 'yields', 'BLC Nominal daily data current month.xlsx')
-GOV_PATH = os.path.join('temp', 'yields', 'GLC Nominal daily data current month.xlsx')
+BANK_PATH = Path('temp/yields/BLC Nominal daily data current month.xlsx')
 CHART_SAVE = 'chart.png'
 DB_PATH = 'fixed_rate.db'
 LOG_PATH = 'log.txt'
 BG_COLOUR = '#FAFAFD'
 FG_COLOUR = '#EEEEEE'
-CHART_FONT = {'fontname': 'Cabin'}
+CHART_FONT = {'fontname': 'DejaVu Sans'}
 
 
 # custom error in case BoE website not updated
@@ -58,7 +58,6 @@ class OutdatedFileError(Exception):
     Bank of England file normally uploaded around midday, but sometimes isn't. This class prompts
     a retry of the file download if the file hasn't yet been updated.
     """
-
     pass
 
 
@@ -530,11 +529,12 @@ def predict_rate_change(data):
         msg_text = '\n'.join(messages)
         print(msg_text)
         config = load_config()
-        slack_token = config['slack_login']['bot_token']
-        client = slack.WebClient(token=slack_token)
-        response = client.chat_postMessage(channel=config['slack_channel'],
-                                           text=msg_text)
-        assert response["ok"]
+        if config['send_slack']:
+            slack_token = config['slack_login']['bot_token']
+            client = slack.WebClient(token=slack_token)
+            response = client.chat_postMessage(channel=config['slack_channel'],
+                                               text=msg_text)
+            assert response["ok"]
 
 
 def round_nearest(x, a):
@@ -614,7 +614,7 @@ if __name__ == '__main__':
             raise SyntaxError('Valid modes are d (produce daily chart) or m (build prediction model)')
 
     elif environment == "development":
-        model_paramters()
+        daily_chart()
 
     else:
         print(f"Mode ({environment}) specified in config.yml is invalid")
