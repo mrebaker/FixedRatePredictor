@@ -9,7 +9,7 @@ et-xmlfile==1.0.1
 idna==2.8
 idna-ssl==1.1.0
 jdcal==1.4.1
-joblib==0.14.1
+joblib==1.2.0
 kiwisolver==1.1.0
 matplotlib==3.1.2
 multidict==4.7.4
